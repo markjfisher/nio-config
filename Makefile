@@ -1,0 +1,26 @@
+TARGETS := msdos bbc linux
+DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
+
+.PHONY: all all-targets clean disk confnio-bbc-disk confnio-master-disk $(TARGETS)
+
+all: $(DEFAULT_TARGET)
+
+$(TARGETS):
+	$(MAKE) -f makefiles/build.mk TARGET=$@
+
+all-targets: $(TARGETS)
+
+disk:
+	$(MAKE) -f makefiles/build.mk TARGET=$(if $(TARGET),$(TARGET),msdos) disk
+
+config-nio-bbc-stage config-nio-master-stage:
+	$(MAKE) -f makefiles/build.mk TARGET=bbc $@
+
+confnio-bbc-disk:
+	$(MAKE) -f makefiles/build.mk TARGET=bbc config-nio-bbc-stage
+
+confnio-master-disk:
+	$(MAKE) -f makefiles/build.mk TARGET=bbc config-nio-master-stage
+
+clean:
+	rm -rf build
