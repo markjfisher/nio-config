@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 _HERE = Path(__file__).resolve()
-_NIO_APPS_ROOT = _HERE.parents[2]
-_WORKSPACE = _NIO_APPS_ROOT.parents[1]
+_NIO_CONFIG_ROOT = _HERE.parents[2]
+_WORKSPACE = _NIO_CONFIG_ROOT.parents[1]
 _FN_ROM_TESTS = _WORKSPACE / "repos" / "fn-rom" / "integration-tests" / "beebium"
 
 if str(_FN_ROM_TESTS) not in sys.path:
@@ -27,7 +27,7 @@ add_fujinet_tools_to_path()
 
 
 def pytest_addoption(parser):
-    group = parser.getgroup("nio-apps-beebium", "nio-apps Beebium tests")
+    group = parser.getgroup("nio-config-beebium", "nio-config Beebium tests")
     group.addoption(
         "--fn-rom",
         action="store",
@@ -56,13 +56,13 @@ def pytest_addoption(parser):
     group.addoption(
         "--screen-evidence-dir",
         action="store",
-        default=os.environ.get("NIO_APPS_BEEBIUM_EVIDENCE_ROOT", ""),
+        default=os.environ.get("NIO_CONFIG_BEEBIUM_EVIDENCE_ROOT", ""),
         help="directory for Beebium screen evidence",
     )
     group.addoption(
         "--no-screen-evidence",
         action="store_true",
-        default=os.environ.get("NIO_APPS_BEEBIUM_NO_EVIDENCE", "") in ("1", "true", "yes"),
+        default=os.environ.get("NIO_CONFIG_BEEBIUM_NO_EVIDENCE", "") in ("1", "true", "yes"),
         help="disable Beebium screen evidence capture",
     )
 
@@ -74,8 +74,8 @@ def pytest_configure(config):
             evidence_root = Path(requested).expanduser()
         else:
             stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-            evidence_root = _NIO_APPS_ROOT / "test-evidence" / f"beebium-{stamp}"
-        config._nio_apps_beebium_evidence_root = evidence_root
+            evidence_root = _NIO_CONFIG_ROOT / "test-evidence" / f"beebium-{stamp}"
+        config._nio_config_beebium_evidence_root = evidence_root
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -85,22 +85,22 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_report_header(config):
-    root = getattr(config, "_nio_apps_beebium_evidence_root", None)
+    root = getattr(config, "_nio_config_beebium_evidence_root", None)
     if root is None:
-        return "nio-apps Beebium screen evidence: disabled"
-    return f"nio-apps Beebium screen evidence: {root}"
+        return "nio-config Beebium screen evidence: disabled"
+    return f"nio-config Beebium screen evidence: {root}"
 
 
 @pytest.fixture()
 def screen_evidence(pytestconfig, request):
-    root = getattr(pytestconfig, "_nio_apps_beebium_evidence_root", None)
+    root = getattr(pytestconfig, "_nio_config_beebium_evidence_root", None)
     if root is None:
         yield None
         return
 
     recorder = ScreenEvidenceRecorder(
         root=Path(root),
-        profile="bbc-config-nio",
+        lane="bbc-config-nio",
         nodeid=request.node.nodeid,
     )
     try:
@@ -216,14 +216,14 @@ def real_fujinet_config_nio(pytestconfig):
             "NAVTEST",
         ],
         check=True,
-        cwd=str(_NIO_APPS_ROOT),
+        cwd=str(_NIO_CONFIG_ROOT),
     )
 
     fn.start()
     try:
         yield fn
     finally:
-        keep = os.environ.get("NIO_APPS_BEEBIUM_KEEP_FUJINET", "") in ("1", "true", "yes")
+        keep = os.environ.get("NIO_CONFIG_BEEBIUM_KEEP_FUJINET", "") in ("1", "true", "yes")
         fn.cleanup(keep=keep)
 
 

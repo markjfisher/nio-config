@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Run nio-apps Beebium integration tests for BBC config-nio.
+# Run nio-config Beebium integration tests for BBC config-nio.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-nio_apps="$(cd "$here/../.." && pwd)"
-workspace="$(cd "$nio_apps/../.." && pwd)"
+nio_config="$(cd "$here/../.." && pwd)"
+workspace="$(cd "$nio_config/../.." && pwd)"
 
 export BEEBIUM_HOME="${BEEBIUM_HOME:-$HOME/dev/bbc/beebium}"
 export FUJINET_NIO_HOME="${FUJINET_NIO_HOME:-$workspace/repos/fujinet-nio}"
@@ -26,4 +26,4 @@ fi
 )
 
 cd "$here"
-exec uv run --python "${BEEBIUM_PYTHON:-3.12}" --with pytest --with-editable "$client" python -m pytest -p no:beebium "$@"
+exec uv run --python "${BEEBIUM_PYTHON:-3.12}" --with pytest --with Pillow --with-editable "$client" python -m pytest -p no:beebium "$@"
