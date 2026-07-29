@@ -4,8 +4,8 @@
 
 The template generator consumes this layout and emits:
 
-- `apps/config-nio/platform/bbc/config_nio_template_data.s`: compressed table data linked into `CONFNIO`.
-- `apps/config-nio/platform/bbc/config_nio_layout.h`: C macros used by the BBC UI overlay code.
+- `src/platform/bbc/config_nio_template_data.s`: compressed table data linked into `CONFNIO`.
+- `src/platform/bbc/config_nio_layout.h`: C macros used by the BBC UI overlay code.
 
 The source template binaries live in `bbc/assets/config-nio-templates/`:
 

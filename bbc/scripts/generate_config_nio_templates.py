@@ -11,7 +11,7 @@ WIDTH = 40
 HEIGHT = 25
 BBC_DIR = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = BBC_DIR / "assets" / "config-nio-templates"
-SRC_BBC_DIR = Path(__file__).resolve().parents[2] / "apps" / "config-nio" / "platform" / "bbc"
+SRC_BBC_DIR = Path(__file__).resolve().parents[2] / "src" / "platform" / "bbc"
 DEFAULT_LAYOUT = BBC_DIR / "config_nio_layout.json"
 
 
