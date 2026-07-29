@@ -49,14 +49,15 @@ CONFIG_NIO_SRCS_COMMON := \
 	$(CONFIG_NIO_DIR)/common/config_nio_state.c \
 	$(CONFIG_NIO_DIR)/common/config_nio_store.c \
 	$(CONFIG_NIO_DIR)/common/config_nio_browse.c \
+	$(CONFIG_NIO_DIR)/common/config_nio_fatal.c \
 	$(CONFIG_NIO_DIR)/common/config_nio_ui.c \
 	$(CONFIG_NIO_DIR)/platform/$(PLATFORM)/config_nio_ui.c
 
 CONFIG_NIO_SRCS_bbc := \
 	$(CONFIG_NIO_DIR)/common/fnsvc_config_nio_bbc.c \
-	$(SRC_DIR)/platform/$(PLATFORM)/fnctl.c \
-	$(CONFIG_NIO_DIR)/common/config_nio_state.c \
-	$(CONFIG_NIO_DIR)/common/config_nio_store.c \
+	$(CONFIG_NIO_DIR)/platform/$(PLATFORM)/config_nio_fatal_bbc.c \
+	$(CONFIG_NIO_DIR)/platform/$(PLATFORM)/config_nio_state_bbc.c \
+	$(CONFIG_NIO_DIR)/platform/$(PLATFORM)/config_nio_store_table_bbc.c \
 	$(CONFIG_NIO_DIR)/platform/$(PLATFORM)/config_nio_template.c \
 	$(CONFIG_NIO_DIR)/platform/$(PLATFORM)/config_nio_ui.c
 
@@ -139,8 +140,8 @@ $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(CONFIG_NIO_MAIN_OBJ) $(CONFIG_NIO_COMMON_
 ifeq ($(TARGET),bbc)
 BBC_CONFIG_NIO_START_ADDRESS ?= 0x1900
 BBC_CONFIG_NIO_HIMEM ?= 0x7C00
-$(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DCONFIG_NIO_BBC_LITE
-$(CONFIG_NIO_ASM_OBJS): ASMFLAGS += -DCONFIG_NIO_BBC_LITE
+$(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DCONFIG_NIO_EXTERNAL_TABLE_STATE
+$(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DFNSVC_MOUNT_URI_MAX=160 -DFNSVC_MOUNT_MODE_MAX=4
 ifeq ($(BBC_CONFIG_NIO_SHADOW_MODE),1)
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DCONFIG_NIO_BBC_SHADOW_MODE
 endif

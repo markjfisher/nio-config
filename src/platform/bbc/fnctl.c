@@ -6,26 +6,18 @@
 #include <stddef.h>
 #include <string.h>
 
-#ifndef CONFIG_NIO_BBC_LITE
 static uint16_t last_dos_error;
-#endif
-#ifndef CONFIG_NIO_BBC_LITE
+
 #define FNCTL_APP_NS "nio.apps"
 #define FNCTL_STATE_NS "fujinet-nio"
 #define FNCTL_KEY_URI "current-host"
 #define FNCTL_KEY_PATH "current-display-path"
 
-#ifdef CONFIG_NIO_BBC_LITE
-#define FNCTL_APPSTORE_BUF_SIZE 40
-#else
 #define FNCTL_APPSTORE_BUF_SIZE 320
-#endif
 static uint8_t appstore_buf[FNCTL_APPSTORE_BUF_SIZE];
 static fn_appstore_io_t appstore_io = { appstore_buf, sizeof(appstore_buf) };
 static char key_buf[16];
-#endif
 
-#ifndef CONFIG_NIO_BBC_LITE
 static void zero_bytes(void *ptr, uint16_t len)
 {
   uint8_t *p = (uint8_t *) ptr;
@@ -76,7 +68,6 @@ static int write_key(const char *key, const char *value)
                                      (const uint8_t *) value, len, &wr);
   return result == FN_OK && wr.bytes_written == len;
 }
-#endif
 
 int fnctl_find_drive(void)
 {
@@ -88,7 +79,6 @@ int fnctl_find_drive_for_unit(uint8_t unit)
   return (int) unit + 1;
 }
 
-#ifndef CONFIG_NIO_BBC_LITE
 int fnctl_get_state(fnctl_state_t *state)
 {
   if (!state)
@@ -147,9 +137,7 @@ int fnctl_set_unit_slot(uint8_t unit, uint8_t slot)
   result = fn_appstore_write(&appstore_io, FNCTL_APP_NS, unit_key(unit), 0, slot_buf, 1, &wr);
   return result == FN_OK && wr.bytes_written == 1;
 }
-#endif
 
-#ifndef CONFIG_NIO_BBC_LITE
 int fnctl_nio_call(uint8_t device, uint8_t command,
                    const void *request, uint16_t request_len,
                    void *response, uint16_t response_capacity,
@@ -184,9 +172,7 @@ uint16_t fnctl_last_dos_error(void)
 {
   return last_dos_error;
 }
-#endif
 
-#ifndef CONFIG_NIO_BBC_LITE
 const char *fnctl_status_name(uint8_t status)
 {
   switch (status) {
@@ -202,4 +188,3 @@ const char *fnctl_status_name(uint8_t status)
   default: return "UNKNOWN";
   }
 }
-#endif

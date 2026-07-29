@@ -29,13 +29,8 @@ enum {
   SCREEN_SLOTS
 };
 
-#ifndef CONFIG_NIO_BBC_LITE
-static char num_buf[6];
-static char edit_buf[CONFIG_NIO_URI_MAX + 1];
-#else
 extern uint8_t config_nio_store_buf[];
 #define edit_buf ((char *) config_nio_store_buf)
-#endif
 static char uri_buf[BBC_URI_WORK_MAX];
 static uint8_t current_screen;
 static uint8_t selected_host;
@@ -63,22 +58,13 @@ extern uint8_t config_nio_bbc_edit_y;
 extern uint8_t config_nio_bbc_edit_width;
 int config_nio_bbc_edit_line(void);
 void config_nio_bbc_load_template(const char *asset_name);
-#ifdef CONFIG_NIO_BBC_LITE
 void __fastcall__ config_nio_bbc_parent_path(char *path);
 int config_nio_bbc_enter_dir(char *path, const char *name);
-#endif
 #define clear_line(row) config_nio_bbc_clear_line(row)
 #define bbc_cursor(on) config_nio_bbc_cursor(on)
 #define put_fixed(s, width) config_nio_bbc_put_fixed((s), (width))
 #define put_tail(s, width) config_nio_bbc_put_tail((s), (width))
 #define put_basename(s, width) config_nio_bbc_put_basename((s), (width))
-
-#ifndef CONFIG_NIO_BBC_LITE
-static void nl(void)
-{
-  cputc('\n');
-}
-#endif
 
 static void mode7(void)
 {
@@ -98,32 +84,6 @@ static void clear_field(uint8_t x, uint8_t y, uint8_t width)
   put_fixed("", width);
   gotoxy(x, y);
 }
-
-#ifndef CONFIG_NIO_BBC_LITE
-static void put_uint(unsigned value)
-{
-  uint8_t i;
-
-  i = 0;
-  do {
-    num_buf[i++] = (char) ('0' + (value % 10U));
-    value = (unsigned) (value / 10U);
-  } while (value && i < sizeof(num_buf));
-
-  while (i)
-    cputc(num_buf[--i]);
-}
-#endif
-
-#ifndef CONFIG_NIO_BBC_LITE
-static void status_line(const char *s)
-{
-  clear_line(CONFIG_NIO_BBC_SCREEN_STATUS_Y);
-  gotoxy(CONFIG_NIO_BBC_SCREEN_STATUS_X, CONFIG_NIO_BBC_SCREEN_STATUS_Y);
-  put_fixed(s ? s : "", CONFIG_NIO_BBC_SCREEN_STATUS_WIDTH);
-  clear_line(CONFIG_NIO_BBC_SCREEN_STATUS_CLEAR_2_Y);
-}
-#endif
 
 static void pause_line(const char *s)
 {
@@ -200,45 +160,16 @@ static int prompt_line(const char *label, char *buf, uint16_t cap)
 
 static void parent_path(char *path)
 {
-#ifdef CONFIG_NIO_BBC_LITE
   config_nio_bbc_parent_path(path);
-#else
-  uint16_t len;
-
-  len = (uint16_t) strlen(path);
-  while (len > 0 && path[len - 1] == '/')
-    path[--len] = 0;
-  while (len > 0 && path[len - 1] != '/')
-    path[--len] = 0;
-#endif
 }
 
 static int enter_dir(config_nio_state_t *state, const char *name)
 {
-#ifdef CONFIG_NIO_BBC_LITE
   if (!config_nio_bbc_enter_dir(state->browse_path, name)) {
     config_nio_set_status(state, "Path long");
     return 0;
   }
   return 1;
-#else
-  uint16_t len;
-  uint16_t nlen;
-
-  len = (uint16_t) strlen(state->browse_path);
-  nlen = (uint16_t) strlen(name);
-  if ((uint16_t) (len + nlen + 2) > CONFIG_NIO_PATH_MAX) {
-    config_nio_set_status(state, "Path long");
-    return 0;
-  }
-  if (len > 0 && state->browse_path[len - 1] != '/')
-    state->browse_path[len++] = '/';
-  memcpy(&state->browse_path[len], name, nlen);
-  len = (uint16_t) (len + nlen);
-  state->browse_path[len++] = '/';
-  state->browse_path[len] = 0;
-  return 1;
-#endif
 }
 
 static int fetch_browse_page(config_nio_state_t *state)
@@ -857,115 +788,3 @@ void config_nio_run(config_nio_state_t *state)
   }
   clrscr();
 }
-
-#ifndef CONFIG_NIO_BBC_LITE
-static void header(const char *screen)
-{
-  uint8_t i;
-
-  text_at(0, 0, "CONFNIO ");
-  cputs(screen);
-  text_at(0, 1, "H Hosts  S Slots  X Mount  Q Quit");
-  gotoxy(0, 2);
-  for (i = 0; i < BBC_WIDTH; i++)
-    cputc('-');
-}
-
-int config_nio_ui_run(config_nio_state_t *state)
-{
-  (void) state;
-  return 0;
-}
-
-void config_nio_ui_clear(void)
-{
-  clrscr();
-}
-
-void config_nio_ui_header(const char *title, const char *hint)
-{
-  header(title ? title : "");
-  if (hint && *hint)
-    status_line(hint);
-}
-
-void config_nio_ui_status(const char *status)
-{
-  status_line(status);
-}
-
-void config_nio_ui_pause(void)
-{
-  (void) cgetc();
-}
-
-int config_nio_ui_get_key(void)
-{
-  return cgetc();
-}
-
-int config_nio_ui_prompt(const char *label, char *buf, uint16_t cap)
-{
-  return prompt_line(label, buf, cap);
-}
-
-void config_nio_ui_putc(char c)
-{
-  cputc(c);
-}
-
-void config_nio_ui_print(const char *s)
-{
-  cputs(s ? s : "");
-}
-
-void config_nio_ui_println(const char *s)
-{
-  config_nio_ui_print(s);
-  nl();
-}
-
-void config_nio_ui_print_uint(unsigned value)
-{
-  put_uint(value);
-}
-
-void config_nio_ui_print_ulong(unsigned long value)
-{
-  put_uint((unsigned) value);
-}
-
-void config_nio_ui_print_padded(const char *s, uint8_t width)
-{
-  put_fixed(s, width);
-}
-
-const char *config_nio_ui_platform_name(void)
-{
-  return "BBC M7";
-}
-
-uint8_t config_nio_ui_screen_width(void)
-{
-  return BBC_WIDTH;
-}
-
-uint8_t config_nio_ui_screen_height(void)
-{
-  return BBC_ROWS;
-}
-
-void config_nio_ui_drive_label(uint8_t unit, char *buf, uint8_t cap)
-{
-  if (!buf || cap < 7)
-    return;
-  strcpy(buf, "Drive0");
-  buf[5] = (char) ('0' + unit);
-}
-
-int config_nio_ui_show_mappings(config_nio_state_t *state)
-{
-  (void) state;
-  return 0;
-}
-#endif
