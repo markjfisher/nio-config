@@ -8,8 +8,6 @@ static char uri_edit[CONFIG_NIO_URI_MAX + 1];
 static char uri_tmp[CONFIG_NIO_URI_MAX + 1];
 static char mode_edit[4];
 static char drive_label[16];
-static config_nio_slot_t slot_tmp_a;
-static config_nio_slot_t slot_tmp_b;
 
 static int prompt_index(const char *label, uint8_t max, uint8_t *out)
 {
@@ -107,11 +105,11 @@ static void show_slots(config_nio_state_t *state)
 
     (void) config_nio_refresh_slots(state);
     config_nio_ui_clear();
-    config_nio_ui_header("Slots", "E Edit URI  D Delete  S Swap  Q Back");
+    config_nio_ui_header("Slots", "N/P Page  E Edit  D Delete  Q Back");
     for (i = 0; i < FNCTL_MAX_UNITS; i++) {
       config_nio_slot_t *mount;
       mount = &state->slots[i];
-      config_nio_ui_print_uint((unsigned) i);
+      config_nio_ui_print_uint((unsigned) (state->slot_start + i + 1));
       config_nio_ui_print("  ");
       config_nio_ui_println(mount->enabled && mount->uri[0] ? mount->uri : "(empty)");
     }
@@ -120,11 +118,15 @@ static void show_slots(config_nio_state_t *state)
     key = config_nio_ui_get_key();
     if (key == 'q' || key == 'Q')
       return;
-    if (key == 'd' || key == 'D') {
+    if ((key == 'n' || key == 'N') && state->slots_more) {
+      state->slot_start = (uint16_t) (state->slot_start + state->slot_count);
+    } else if ((key == 'p' || key == 'P') && state->slot_start) {
+      state->slot_start = state->slot_start > FNCTL_MAX_UNITS
+                        ? (uint16_t) (state->slot_start - FNCTL_MAX_UNITS) : 0;
+    } else if (key == 'd' || key == 'D') {
       uint8_t slot;
       if (prompt_index("Delete slot", FNCTL_MAX_UNITS, &slot)) {
-        if (fnsvc_set_mount(slot, "", "r", 0)) {
-          (void) config_nio_refresh_slots(state);
+        if (config_nio_delete_slot(state, slot)) {
           config_nio_set_status(state, "Slot cleared");
         } else {
           config_nio_set_status(state, "Unable to clear slot");
@@ -136,31 +138,11 @@ static void show_slots(config_nio_state_t *state)
         strcpy(uri_edit, state->slots[slot].uri);
         if (config_nio_ui_prompt("URI", uri_edit, sizeof(uri_edit)) &&
             uri_edit[0]) {
-          if (fnsvc_set_mount(slot, uri_edit, "rw", 1)) {
-            (void) config_nio_refresh_slots(state);
+          if (config_nio_update_slot(state, slot, uri_edit, "rw")) {
             config_nio_set_status(state, "Slot saved");
           } else {
             config_nio_set_status(state, "Unable to save slot");
           }
-        }
-      }
-    } else if (key == 's' || key == 'S') {
-      uint8_t a;
-      uint8_t b;
-      if (prompt_index("First slot", FNCTL_MAX_UNITS, &a) &&
-          prompt_index("Second slot", FNCTL_MAX_UNITS, &b)) {
-        slot_tmp_a = state->slots[a];
-        slot_tmp_b = state->slots[b];
-        if (fnsvc_set_mount(a, slot_tmp_b.uri,
-                            slot_tmp_b.mode[0] ? slot_tmp_b.mode : "r",
-                            slot_tmp_b.enabled) &&
-            fnsvc_set_mount(b, slot_tmp_a.uri,
-                            slot_tmp_a.mode[0] ? slot_tmp_a.mode : "r",
-                            slot_tmp_a.enabled)) {
-          (void) config_nio_refresh_slots(state);
-          config_nio_set_status(state, "Slots swapped");
-        } else {
-          config_nio_set_status(state, "Swap failed");
         }
       }
     }
@@ -184,8 +166,8 @@ static void show_mappings(config_nio_state_t *state)
         config_nio_ui_print_uint((unsigned) unit);
         config_nio_ui_print("  ");
         config_nio_ui_print_padded(drive_label, 8);
-        config_nio_ui_print(" slot ");
-        config_nio_ui_print_uint((unsigned) state->mappings[unit].slot);
+        config_nio_ui_print(" ");
+        config_nio_ui_print_padded(state->mappings[unit].uri, 20);
         config_nio_ui_print(" ");
         config_nio_ui_println(state->mappings[unit].readonly ? "ro" : "rw");
       } else {
@@ -208,7 +190,11 @@ static void show_mappings(config_nio_state_t *state)
         strcpy(mode_edit, state->mappings[unit_idx].readonly ? "ro" : "rw");
         (void) config_nio_ui_prompt("Mode ro/rw", mode_edit, sizeof(mode_edit));
         state->mappings[unit_idx].valid = 1;
-        state->mappings[unit_idx].slot = slot;
+        if (!state->slots[slot].uri[0]) {
+          config_nio_set_status(state, "Catalog entry is empty");
+          continue;
+        }
+        strcpy(state->mappings[unit_idx].uri, state->slots[slot].uri);
         state->mappings[unit_idx].readonly =
           (uint8_t) (strcmp(mode_edit, "ro") == 0 || strcmp(mode_edit, "RO") == 0);
         (void) config_nio_save_mappings(state);
@@ -255,8 +241,8 @@ void config_nio_run(config_nio_state_t *state)
         continue;
       config_nio_ui_drive_label(i, drive_label, sizeof(drive_label));
       config_nio_ui_print_padded(drive_label, 8);
-      config_nio_ui_print(" -> slot ");
-      config_nio_ui_print_uint((unsigned) state->mappings[i].slot);
+      config_nio_ui_print(" -> ");
+      config_nio_ui_print(state->mappings[i].uri);
       config_nio_ui_print(" ");
       config_nio_ui_println(state->mappings[i].readonly ? "ro" : "rw");
     }

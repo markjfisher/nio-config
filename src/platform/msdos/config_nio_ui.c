@@ -879,12 +879,8 @@ static void dos_draw_mapping_line(WINDOW *win, int y, config_nio_state_t *state,
   dos_set_list_attr(win, selected, active);
   mvwaddnstr(win, y, 2, dos_drive_label, 5);
   if (mapping->valid) {
-    wprintw(win, "->%u %s ", (unsigned) mapping->slot,
-            mapping->readonly ? "ro" : "rw");
-    if (mapping->slot < FNCTL_MAX_UNITS && state->slots[mapping->slot].uri[0])
-      dos_curses_print_tail(win, state->slots[mapping->slot].uri, 12);
-    else
-      dos_curses_print_clip(win, "(empty)", 12);
+    wprintw(win, "-> %s ", mapping->readonly ? "ro" : "rw");
+    dos_curses_print_tail(win, mapping->uri, 14);
   } else {
     dos_curses_print_clip(win, "(unassigned)", 17);
   }
@@ -958,7 +954,7 @@ static void dos_draw_slots_screen(config_nio_state_t *state)
   wnoutrefresh(dos_main_win);
 
   dos_draw_side_mappings(state);
-  dos_draw_status("Slots: Tab switches pane, E edits slot, Enter assigns slot to drive",
+  dos_draw_status("Slots: N/P page, E edits, Enter assigns entry to drive",
                   dos_slot_status(state));
 }
 
@@ -1783,12 +1779,11 @@ static void dos_assign_selected_entry(config_nio_state_t *state)
     config_nio_set_status(state, "URI is too long");
     return;
   }
-  if (!fnsvc_set_mount(dos_selected_slot, dos_uri_buf, "rw", 1)) {
+  if (!config_nio_add_slot(state, dos_uri_buf, "rw")) {
     config_nio_set_status(state, "Unable to save slot");
     return;
   }
-  (void) config_nio_refresh_slots(state);
-  config_nio_set_status(state, "Assigned file to selected slot");
+  config_nio_set_status(state, "Saved URI");
 }
 
 static void dos_browser_enter(config_nio_state_t *state)
@@ -2101,7 +2096,16 @@ static int dos_handle_key(config_nio_state_t *state, int key)
       dos_assign_selected_entry(state);
     }
   } else if (dos_screen == DOS_SCREEN_SLOTS) {
-    if (key == DOS_KEY_ENTER || key == '\n' || key == '\r') {
+    if ((key == 'n' || key == 'N') && state->slots_more) {
+      state->slot_start = (uint16_t) (state->slot_start + state->slot_count);
+      dos_selected_slot = 0;
+      (void) config_nio_refresh_slots(state);
+    } else if ((key == 'p' || key == 'P') && state->slot_start) {
+      state->slot_start = state->slot_start > FNCTL_MAX_UNITS
+                        ? (uint16_t) (state->slot_start - FNCTL_MAX_UNITS) : 0;
+      dos_selected_slot = 0;
+      (void) config_nio_refresh_slots(state);
+    } else if (key == DOS_KEY_ENTER || key == '\n' || key == '\r') {
       dos_map_selected(state);
     } else if (dos_focus == 1 && key >= '0' && key <= '7' &&
                (uint8_t) (key - '0') < FNCTL_MAX_UNITS) {
@@ -2133,8 +2137,13 @@ static int dos_handle_key(config_nio_state_t *state, int key)
 
 static void dos_map_selected(config_nio_state_t *state)
 {
+  if (!state->slots[dos_selected_slot].uri[0]) {
+    config_nio_set_status(state, "Selected catalog entry is empty");
+    return;
+  }
   state->mappings[dos_selected_unit].valid = 1;
-  state->mappings[dos_selected_unit].slot = dos_selected_slot;
+  strcpy(state->mappings[dos_selected_unit].uri,
+         state->slots[dos_selected_slot].uri);
   if (!state->mappings[dos_selected_unit].readonly)
     state->mappings[dos_selected_unit].readonly = 0;
   (void) config_nio_save_mappings(state);
@@ -2164,8 +2173,7 @@ static void dos_clear_mapping(config_nio_state_t *state)
 
 static void dos_clear_slot(config_nio_state_t *state)
 {
-  if (fnsvc_set_mount(dos_selected_slot, "", "r", 0)) {
-    (void) config_nio_refresh_slots(state);
+  if (config_nio_delete_slot(state, dos_selected_slot)) {
     config_nio_set_status(state, "Slot cleared");
   } else {
     config_nio_set_status(state, "Unable to clear slot");
@@ -2180,8 +2188,7 @@ static void dos_edit_slot(config_nio_state_t *state)
       !dos_uri_edit[0])
     return;
 
-  if (fnsvc_set_mount(dos_selected_slot, dos_uri_edit, "rw", 1)) {
-    (void) config_nio_refresh_slots(state);
+  if (config_nio_update_slot(state, dos_selected_slot, dos_uri_edit, "rw")) {
     config_nio_set_status(state, "Slot saved");
   } else {
     config_nio_set_status(state, "Unable to save slot");

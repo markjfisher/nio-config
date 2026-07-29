@@ -7,7 +7,7 @@
 #define CONFIG_NIO_MAX_ENTRIES 5
 #define CONFIG_NIO_URI_MAX 48
 #define CONFIG_NIO_NAME_MAX 31
-#define CONFIG_NIO_TEXT_MAX 256
+#define CONFIG_NIO_TEXT_MAX 512
 #define CONFIG_NIO_PATH_MAX FNSVC_MAX_PATH
 #define CONFIG_NIO_STATUS_MAX 95
 #else
@@ -16,15 +16,15 @@
 #define CONFIG_NIO_MAX_ENTRIES 20
 #define CONFIG_NIO_URI_MAX FNSVC_MAX_URI
 #define CONFIG_NIO_NAME_MAX 79
-#define CONFIG_NIO_TEXT_MAX 1024
+#define CONFIG_NIO_TEXT_MAX 4096
 #define CONFIG_NIO_PATH_MAX FNSVC_MAX_PATH
 #define CONFIG_NIO_STATUS_MAX 95
 #endif
 
 typedef struct {
   uint8_t valid;
-  uint8_t slot;
   uint8_t readonly;
+  char uri[CONFIG_NIO_URI_MAX + 1];
 } config_nio_mapping_t;
 
 typedef struct {
@@ -51,6 +51,9 @@ typedef struct {
   uint8_t host_count;
   char hosts[CONFIG_NIO_MAX_HOSTS][CONFIG_NIO_URI_MAX + 1];
   config_nio_slot_t slots[FNCTL_MAX_UNITS];
+  uint16_t slot_start;
+  uint8_t slot_count;
+  uint8_t slots_more;
   config_nio_mapping_t mappings[FNCTL_MAX_UNITS];
   config_nio_prefs_t prefs;
   config_nio_entry_t entries[CONFIG_NIO_MAX_ENTRIES];

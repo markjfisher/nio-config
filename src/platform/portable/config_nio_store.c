@@ -6,17 +6,20 @@
 
 #if defined(__CC65__)
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 512
+#define CONFIG_NIO_SLOT_STORE_SIZE 2048
 #else
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 1024
+#define CONFIG_NIO_SLOT_STORE_SIZE 16384
 #endif
 
 #define CONFIG_NIO_STORE_BUF_SIZE (CONFIG_NIO_TEXT_MAX + 1)
 #define CONFIG_NIO_APPSTORE_READ_MAX (CONFIG_NIO_APPSTORE_BUF_SIZE - 10)
 
 static uint8_t store_buf[CONFIG_NIO_STORE_BUF_SIZE];
+static uint8_t slot_store_buf[CONFIG_NIO_SLOT_STORE_SIZE];
 static uint8_t appstore_buf[CONFIG_NIO_APPSTORE_BUF_SIZE];
 static fn_appstore_io_t appstore_io = { appstore_buf, sizeof(appstore_buf) };
-static char line_buf[CONFIG_NIO_URI_MAX + 1];
+static char line_buf[CONFIG_NIO_URI_MAX + 10];
 static char host_tmp[CONFIG_NIO_URI_MAX + 1];
 
 static void append_digit(char *buf, uint16_t *off, uint8_t value)
@@ -48,7 +51,7 @@ static int appstore_read_text(const char *key, char *buf, uint16_t cap,
   fn_appstore_read_t rr;
   uint16_t max_read;
   uint8_t result;
-  uint16_t n;
+  uint16_t total;
 
   if (cap == 0)
     return 0;
@@ -61,20 +64,26 @@ static int appstore_read_text(const char *key, char *buf, uint16_t cap,
   if (max_read > CONFIG_NIO_APPSTORE_READ_MAX)
     max_read = CONFIG_NIO_APPSTORE_READ_MAX;
 
-  result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS, key, 0, appstore_buf,
-                            max_read, &rr);
-  if (result != FN_OK)
-    return 0;
-  if ((rr.flags & FN_APPSTORE_READ_EXISTS) == 0)
-    return 1;
-
-  n = rr.bytes_read;
-  if (n >= cap)
-    n = (uint16_t) (cap - 1);
-  memcpy(buf, appstore_buf, n);
-  buf[n] = 0;
-  if (exists)
-    *exists = 1;
+  total = 0;
+  do {
+    uint16_t want;
+    want = (uint16_t) (cap - 1 - total);
+    if (want > max_read)
+      want = max_read;
+    if (want == 0)
+      return 0;
+    result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS, key, total,
+                              appstore_buf, want, &rr);
+    if (result != FN_OK)
+      return 0;
+    if ((rr.flags & FN_APPSTORE_READ_EXISTS) == 0)
+      return 1;
+    if (exists)
+      *exists = 1;
+    memcpy(buf + total, appstore_buf, rr.bytes_read);
+    total = (uint16_t) (total + rr.bytes_read);
+    buf[total] = 0;
+  } while ((rr.flags & FN_APPSTORE_READ_EOF) == 0 && rr.bytes_read != 0);
   return 1;
 }
 
@@ -82,12 +91,26 @@ static int appstore_write_text(const char *key, const char *buf)
 {
   fn_appstore_write_t wr;
   uint16_t len;
-  uint8_t result;
+  uint16_t off;
 
   len = (uint16_t) strlen(buf);
-  result = fn_appstore_write(&appstore_io, CONFIG_NIO_NS, key, 0,
-                             (const uint8_t *) buf, len, &wr);
-  return result == FN_OK && wr.bytes_written == len;
+  off = 0;
+  if (len == 0) {
+    return fn_appstore_write(&appstore_io, CONFIG_NIO_NS, key, 0,
+                             (const uint8_t *) "", 0, &wr) == FN_OK;
+  }
+  while (off < len) {
+    uint16_t chunk;
+    chunk = (uint16_t) (len - off);
+    if (chunk > CONFIG_NIO_APPSTORE_READ_MAX)
+      chunk = CONFIG_NIO_APPSTORE_READ_MAX;
+    if (fn_appstore_write(&appstore_io, CONFIG_NIO_NS, key, off,
+                          (const uint8_t *) buf + off, chunk, &wr) != FN_OK ||
+        wr.bytes_written != chunk)
+      return 0;
+    off = (uint16_t) (off + chunk);
+  }
+  return 1;
 }
 
 static void trim_line(char *s)
@@ -204,7 +227,6 @@ static void parse_mappings(config_nio_state_t *state, const char *text)
     char *b;
     char *c;
     int unit;
-    int slot;
 
     a = line_buf;
     b = strchr(a, '\t');
@@ -217,15 +239,16 @@ static void parse_mappings(config_nio_state_t *state, const char *text)
     *c++ = 0;
 
     unit = atoi(a);
-    slot = atoi(b);
-    if (unit < 0 || unit >= FNCTL_MAX_UNITS || slot < 0 || slot >= FNCTL_MAX_UNITS)
+    if (unit < 0 || unit >= FNCTL_MAX_UNITS || !b[0])
       continue;
 
     {
       config_nio_mapping_t mapping;
 
+      memset(&mapping, 0, sizeof(mapping));
       mapping.valid = 1;
-      mapping.slot = (uint8_t) slot;
+      strncpy(mapping.uri, b, CONFIG_NIO_URI_MAX);
+      mapping.uri[CONFIG_NIO_URI_MAX] = 0;
       mapping.readonly =
         (uint8_t) (strcmp(c, "ro") == 0 || strcmp(c, "RO") == 0);
       (void) config_nio_mapping_set(state, (uint8_t) unit, &mapping);
@@ -316,11 +339,11 @@ int config_nio_save_mappings(const config_nio_state_t *state)
 
     if (!config_nio_mapping_get(state, unit, &mapping) || !mapping.valid)
       continue;
-    if ((uint16_t) (off + 8) >= sizeof(store_buf))
+    if ((uint16_t) (off + strlen(mapping.uri) + 8) >= sizeof(store_buf))
       return 0;
     append_digit((char *) store_buf, &off, unit);
     store_buf[off++] = '\t';
-    append_digit((char *) store_buf, &off, mapping.slot);
+    append_text((char *) store_buf, &off, mapping.uri);
     store_buf[off++] = '\t';
     store_buf[off++] = mapping.readonly ? 'r' : 'r';
     store_buf[off++] = mapping.readonly ? 'o' : 'w';
@@ -328,6 +351,167 @@ int config_nio_save_mappings(const config_nio_state_t *state)
     store_buf[off] = 0;
   }
   return appstore_write_text(CONFIG_NIO_KEY_MAPPINGS, (const char *) store_buf);
+}
+
+static int load_slots_text(uint8_t *exists)
+{
+  return appstore_read_text(CONFIG_NIO_KEY_SLOTS, (char *) slot_store_buf,
+                            sizeof(slot_store_buf), exists);
+}
+
+static int slot_line(const char *uri, const char *mode, char *out, uint16_t cap)
+{
+  uint16_t mode_len;
+  uint16_t uri_len;
+  if (!uri || !uri[0] || strchr(uri, '\t') || strchr(uri, '\n') || strchr(uri, '\r'))
+    return 0;
+  if (!mode || !mode[0])
+    mode = "rw";
+  mode_len = (uint16_t) strlen(mode);
+  uri_len = (uint16_t) strlen(uri);
+  if ((uint16_t) (mode_len + uri_len + 3) > cap)
+    return 0;
+  memcpy(out, mode, mode_len);
+  out[mode_len] = '\t';
+  memcpy(out + mode_len + 1, uri, uri_len);
+  out[mode_len + 1 + uri_len] = '\n';
+  out[mode_len + 2 + uri_len] = 0;
+  return 1;
+}
+
+static int find_slot_line(char *text, uint16_t index, char **start, char **end)
+{
+  uint16_t current;
+  char *p;
+  current = 0;
+  p = text;
+  while (*p) {
+    char *line_end;
+    line_end = strchr(p, '\n');
+    if (!line_end)
+      line_end = p + strlen(p);
+    else
+      line_end++;
+    if (current == index) {
+      *start = p;
+      *end = line_end;
+      return 1;
+    }
+    current++;
+    p = line_end;
+  }
+  return 0;
+}
+
+static int replace_slot_line(uint16_t index, const char *replacement)
+{
+  uint8_t exists;
+  char *start;
+  char *end;
+  uint16_t total;
+  uint16_t old_len;
+  uint16_t new_len;
+  if (!load_slots_text(&exists))
+    return 0;
+  if (!find_slot_line((char *) slot_store_buf, index, &start, &end))
+    return 0;
+  total = (uint16_t) strlen((char *) slot_store_buf);
+  old_len = (uint16_t) (end - start);
+  new_len = (uint16_t) strlen(replacement);
+  if ((uint32_t) total - old_len + new_len >= sizeof(slot_store_buf))
+    return 0;
+  memmove(start + new_len, end, (size_t) (total - (end - (char *) slot_store_buf) + 1));
+  if (new_len)
+    memcpy(start, replacement, new_len);
+  return appstore_write_text(CONFIG_NIO_KEY_SLOTS, (const char *) slot_store_buf);
+}
+
+int config_nio_refresh_slots(config_nio_state_t *state)
+{
+  uint8_t exists;
+  const char *p;
+  uint16_t index;
+  uint8_t visible;
+  uint8_t i;
+  if (!state || !load_slots_text(&exists))
+    return 0;
+  for (i = 0; i < FNCTL_MAX_UNITS; i++)
+    memset(&state->slots[i], 0, sizeof(state->slots[i]));
+  p = (const char *) slot_store_buf;
+  index = 0;
+  visible = 0;
+  while (*p) {
+    const char *end;
+    const char *tab;
+    uint16_t len;
+    end = strchr(p, '\n');
+    if (!end)
+      end = p + strlen(p);
+    len = (uint16_t) (end - p);
+    if (index >= state->slot_start && visible < FNCTL_MAX_UNITS) {
+      config_nio_slot_t *slot;
+      uint16_t mode_len;
+      uint16_t uri_len;
+      slot = &state->slots[visible++];
+      tab = (const char *) memchr(p, '\t', len);
+      if (tab) {
+        mode_len = (uint16_t) (tab - p);
+        if (mode_len > 3) mode_len = 3;
+        memcpy(slot->mode, p, mode_len);
+        slot->mode[mode_len] = 0;
+        uri_len = (uint16_t) (len - (tab + 1 - p));
+        if (uri_len > CONFIG_NIO_URI_MAX) uri_len = CONFIG_NIO_URI_MAX;
+        memcpy(slot->uri, tab + 1, uri_len);
+        slot->uri[uri_len] = 0;
+        slot->enabled = slot->uri[0] != 0;
+      }
+    }
+    index++;
+    p = *end ? end + 1 : end;
+  }
+  if (state->slot_start >= index && index) {
+    state->slot_start = (uint16_t) (((index - 1) / FNCTL_MAX_UNITS) * FNCTL_MAX_UNITS);
+    return config_nio_refresh_slots(state);
+  }
+  state->slot_count = visible;
+  state->slots_more = index > (uint16_t) (state->slot_start + visible);
+  return 1;
+}
+
+int config_nio_add_slot(config_nio_state_t *state, const char *uri, const char *mode)
+{
+  uint8_t exists;
+  uint16_t total;
+  if (!state || !slot_line(uri, mode, line_buf, sizeof(line_buf)) ||
+      !load_slots_text(&exists))
+    return 0;
+  total = (uint16_t) strlen((char *) slot_store_buf);
+  if ((uint32_t) total + strlen(line_buf) >= sizeof(slot_store_buf))
+    return 0;
+  strcpy((char *) slot_store_buf + total, line_buf);
+  if (!appstore_write_text(CONFIG_NIO_KEY_SLOTS, (const char *) slot_store_buf))
+    return 0;
+  return config_nio_refresh_slots(state);
+}
+
+int config_nio_update_slot(config_nio_state_t *state, uint8_t visible_index,
+                           const char *uri, const char *mode)
+{
+  if (!state || visible_index >= state->slot_count ||
+      !slot_line(uri, mode, line_buf, sizeof(line_buf)))
+    return 0;
+  if (!replace_slot_line((uint16_t) (state->slot_start + visible_index), line_buf))
+    return 0;
+  return config_nio_refresh_slots(state);
+}
+
+int config_nio_delete_slot(config_nio_state_t *state, uint8_t visible_index)
+{
+  if (!state || visible_index >= state->slot_count)
+    return 0;
+  if (!replace_slot_line((uint16_t) (state->slot_start + visible_index), ""))
+    return 0;
+  return config_nio_refresh_slots(state);
 }
 
 int config_nio_save_prefs(const config_nio_state_t *state)

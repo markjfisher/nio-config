@@ -2,8 +2,6 @@
 
 #include <string.h>
 
-static fnsvc_mount_t mount_tmp;
-
 static int has_scheme_or_prefix(const char *s)
 {
   const char *p;
@@ -44,40 +42,6 @@ int config_nio_set_status(config_nio_state_t *state, const char *msg)
     state->status[i] = msg[i];
   state->status[i] = 0;
   return 1;
-}
-
-int config_nio_refresh_slots(config_nio_state_t *state)
-{
-  uint8_t slot;
-  int ok;
-
-  if (!state)
-    return 0;
-
-  ok = 1;
-  for (slot = 0; slot < FNCTL_MAX_UNITS; slot++) {
-    config_nio_slot_t slot_state;
-
-    memset(&slot_state, 0, sizeof(slot_state));
-    if (fnsvc_get_mount(slot, &mount_tmp)) {
-      uint16_t n;
-      slot_state.enabled = mount_tmp.enabled;
-      n = (uint16_t) strlen(mount_tmp.uri);
-      if (n >= sizeof(slot_state.uri))
-        n = (uint16_t) (sizeof(slot_state.uri) - 1);
-      memcpy(slot_state.uri, mount_tmp.uri, n);
-      slot_state.uri[n] = 0;
-      n = (uint16_t) strlen(mount_tmp.mode);
-      if (n > 3)
-        n = 3;
-      memcpy(slot_state.mode, mount_tmp.mode, n);
-      slot_state.mode[n] = 0;
-    } else {
-      ok = 0;
-    }
-    (void) config_nio_slot_set(state, slot, &slot_state);
-  }
-  return ok;
 }
 
 int config_nio_compose_uri(const char *host, const char *path,
@@ -142,18 +106,15 @@ int config_nio_mount_mappings(config_nio_state_t *state)
       continue;
     if (!mapping.valid)
       continue;
-    if (mapping.slot >= FNCTL_MAX_UNITS)
-      continue;
-    if (!fnsvc_get_mount(mapping.slot, &mount_tmp) ||
-        !mount_tmp.enabled || !mount_tmp.uri[0]) {
-      config_nio_set_status(state, "Mapped slot is empty");
+    if (!mapping.uri[0]) {
+      config_nio_set_status(state, "Mapped URI is empty");
       continue;
     }
-    if (!fnsvc_disk_mount(mapping.slot, mount_tmp.uri, mapping.readonly)) {
+    if (!fnsvc_disk_mount(unit, mapping.uri, mapping.readonly)) {
       config_nio_set_status(state, "Mount failed");
       continue;
     }
-    if (!fnctl_set_unit_slot(unit, mapping.slot)) {
+    if (!fnctl_set_unit_slot(unit, unit)) {
       config_nio_set_status(state, "Drive map failed");
       continue;
     }

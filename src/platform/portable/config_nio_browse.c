@@ -1,7 +1,6 @@
 #include "config_nio.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 static char uri_buf[FNSVC_MAX_URI + 1];
@@ -87,22 +86,6 @@ static int enter_dir(config_nio_state_t *state, const char *name)
   return 1;
 }
 
-static int prompt_index(const char *label, uint8_t max, uint8_t *out)
-{
-  char input[8];
-  int v;
-
-  if (!config_nio_ui_prompt(label, input, sizeof(input)))
-    return 0;
-  if (!input[0])
-    return 0;
-  v = atoi(input);
-  if (v < 0 || v >= max)
-    return 0;
-  *out = (uint8_t) v;
-  return 1;
-}
-
 int config_nio_browse(config_nio_state_t *state, uint8_t host)
 {
   uint8_t selected;
@@ -169,7 +152,6 @@ int config_nio_browse(config_nio_state_t *state, uint8_t host)
         config_nio_set_status(state, "Use A to assign files to a slot");
       }
     } else if ((key == 'a' || key == 'A') && state->entry_count > 0) {
-      uint8_t slot;
       if (state->entries[selected].is_dir & CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED) {
         config_nio_set_status(state, "Name too long for this client");
         continue;
@@ -178,22 +160,17 @@ int config_nio_browse(config_nio_state_t *state, uint8_t host)
         config_nio_set_status(state, "Pick a file, not a directory");
         continue;
       }
-      if (!prompt_index("Assign to slot", FNCTL_MAX_UNITS, &slot)) {
-        config_nio_set_status(state, "Bad slot");
-        continue;
-      }
       if (!config_nio_compose_uri(state->hosts[host], state->browse_path,
                                   state->entries[selected].name,
                                   uri_buf, sizeof(uri_buf))) {
         config_nio_set_status(state, "URI is too long");
         continue;
       }
-      if (!fnsvc_set_mount(slot, uri_buf, "rw", 1)) {
+      if (!config_nio_add_slot(state, uri_buf, "rw")) {
         config_nio_set_status(state, "Unable to save slot");
         continue;
       }
-      (void) config_nio_refresh_slots(state);
-      config_nio_set_status(state, "Assigned file to slot");
+      config_nio_set_status(state, "Saved URI");
     }
   }
 }

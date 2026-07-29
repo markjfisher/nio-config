@@ -129,7 +129,7 @@ int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
     uint8_t flags;
 
     /* v1 + uriLen + startIndex + maxPayloadBytes + flags = 6 bytes. */
-    if (uri_len + FNSVC_LIST_REQUEST_OVERHEAD > sizeof(req_buf))
+    if ((size_t) uri_len + FNSVC_LIST_REQUEST_OVERHEAD > sizeof(req_buf))
       return fail(FNSVC_ERR_REQUEST_TOO_LARGE);
 
     req_buf[off++] = NIO_FILE_VERSION;
@@ -339,18 +339,11 @@ int fnsvc_get_mount(uint8_t slot, fnsvc_mount_t *mount)
   if (off + len + 1 > resp_len)
     return fail(FNSVC_ERR_SHORT_RESPONSE);
 #if FNSVC_MOUNT_URI_MAX < FNSVC_MAX_URI
-  if (len >= sizeof(mount->uri)) {
-    memcpy(mount->uri, &resp_buf[off], sizeof(mount->uri) - 1);
-    mount->uri[sizeof(mount->uri) - 1] = 0;
-  } else {
-    memcpy(mount->uri, &resp_buf[off], len);
-    mount->uri[len] = 0;
-  }
-#else
+  if (len >= sizeof(mount->uri)) len = (uint8_t) (sizeof(mount->uri) - 1);
+#endif
   memcpy(mount->uri, &resp_buf[off], len);
   mount->uri[len] = 0;
-#endif
-  off += len;
+  off = (uint16_t) (3 + resp_buf[2]);
   len = resp_buf[off++];
   if (off + len > resp_len || len >= sizeof(mount->mode))
     return fail(FNSVC_ERR_SHORT_RESPONSE);
@@ -401,12 +394,13 @@ int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly)
   uint16_t uri_len = (uint16_t) strlen(uri);
   uint16_t off = 0;
 
-  if (slot >= FNCTL_MAX_UNITS || uri_len == 0 || 8 + uri_len > sizeof(req_buf))
+  if (slot >= FNCTL_MAX_UNITS || uri_len == 0 ||
+      (size_t) 8 + uri_len > sizeof(req_buf))
     return 0;
 
   req_buf[off++] = NIO_DISK_VERSION;
   req_buf[off++] = (uint8_t) (slot + 1);
-  req_buf[off++] = readonly ? 0x01 : 0x00;
+  req_buf[off++] = (uint8_t) ((readonly ? 0x01 : 0x00) | 0x02);
   req_buf[off++] = 0x00;
   put_u16le(&req_buf[off], 512);
   off += 2;
