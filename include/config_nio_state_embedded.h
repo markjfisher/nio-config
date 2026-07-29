@@ -23,8 +23,8 @@
 
 typedef struct {
   uint8_t valid;
+  uint8_t slot;
   uint8_t readonly;
-  char uri[CONFIG_NIO_URI_MAX + 1];
 } config_nio_mapping_t;
 
 typedef struct {
@@ -51,7 +51,7 @@ typedef struct {
   uint8_t host_count;
   char hosts[CONFIG_NIO_MAX_HOSTS][CONFIG_NIO_URI_MAX + 1];
   config_nio_slot_t slots[FNCTL_MAX_UNITS];
-  uint16_t slot_start;
+  uint8_t slot_start;
   uint8_t slot_count;
   uint8_t slots_more;
   config_nio_mapping_t mappings[FNCTL_MAX_UNITS];

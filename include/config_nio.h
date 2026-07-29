@@ -10,7 +10,7 @@
 #define CONFIG_NIO_KEY_HOSTS "hosts"
 #define CONFIG_NIO_KEY_MAPPINGS "mappings"
 #define CONFIG_NIO_KEY_PREFS "prefs"
-#define CONFIG_NIO_KEY_SLOTS "slots"
+#define CONFIG_NIO_SLOT_KEY_PREFIX "slot-"
 
 #define CONFIG_NIO_PREF_DATE_YMD 0
 #define CONFIG_NIO_PREF_DATE_YDM 1
@@ -43,10 +43,10 @@ int config_nio_save_hosts(const config_nio_state_t *state);
 int config_nio_save_mappings(const config_nio_state_t *state);
 int config_nio_save_prefs(const config_nio_state_t *state);
 int config_nio_refresh_slots(config_nio_state_t *state);
-int config_nio_add_slot(config_nio_state_t *state, const char *uri, const char *mode);
-int config_nio_update_slot(config_nio_state_t *state, uint8_t visible_index,
-                           const char *uri, const char *mode);
-int config_nio_delete_slot(config_nio_state_t *state, uint8_t visible_index);
+int config_nio_read_slot(uint8_t index, config_nio_slot_t *slot);
+int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
+                          const char *uri, const char *mode);
+int config_nio_delete_slot(config_nio_state_t *state, uint8_t index);
 int config_nio_browse(config_nio_state_t *state, uint8_t host);
 int config_nio_compose_uri(const char *host, const char *path,
                            const char *leaf, char *out, uint16_t cap);

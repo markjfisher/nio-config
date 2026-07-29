@@ -101,16 +101,20 @@ int config_nio_mount_mappings(config_nio_state_t *state)
   mounted = 0;
   for (unit = 0; unit < FNCTL_MAX_UNITS; unit++) {
     config_nio_mapping_t mapping;
+    config_nio_slot_t slot;
 
     if (!config_nio_mapping_get(state, unit, &mapping))
       continue;
     if (!mapping.valid)
       continue;
-    if (!mapping.uri[0]) {
-      config_nio_set_status(state, "Mapped URI is empty");
+    if (!config_nio_read_slot(mapping.slot, &slot) ||
+        !slot.enabled || !slot.uri[0]) {
+      config_nio_set_status(state, "Mapped slot is empty");
       continue;
     }
-    if (!fnsvc_disk_mount(unit, mapping.uri, mapping.readonly)) {
+    if (!fnsvc_disk_mount(unit, slot.uri,
+                          (uint8_t) (mapping.readonly ||
+                                     strcmp(slot.mode, "r") == 0))) {
       config_nio_set_status(state, "Mount failed");
       continue;
     }

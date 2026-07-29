@@ -6,21 +6,19 @@
 
 #if defined(__CC65__)
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 512
-#define CONFIG_NIO_SLOT_STORE_SIZE 2048
 #else
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 1024
-#define CONFIG_NIO_SLOT_STORE_SIZE 16384
 #endif
 
 #define CONFIG_NIO_STORE_BUF_SIZE (CONFIG_NIO_TEXT_MAX + 1)
 #define CONFIG_NIO_APPSTORE_READ_MAX (CONFIG_NIO_APPSTORE_BUF_SIZE - 10)
 
 static uint8_t store_buf[CONFIG_NIO_STORE_BUF_SIZE];
-static uint8_t slot_store_buf[CONFIG_NIO_SLOT_STORE_SIZE];
 static uint8_t appstore_buf[CONFIG_NIO_APPSTORE_BUF_SIZE];
 static fn_appstore_io_t appstore_io = { appstore_buf, sizeof(appstore_buf) };
 static char line_buf[CONFIG_NIO_URI_MAX + 10];
 static char host_tmp[CONFIG_NIO_URI_MAX + 1];
+static char slot_key_buf[9];
 
 static void append_digit(char *buf, uint16_t *off, uint8_t value)
 {
@@ -31,8 +29,10 @@ static void append_digit(char *buf, uint16_t *off, uint8_t value)
 
 static void append_uint(char *buf, uint16_t *off, uint8_t value)
 {
+  if (value >= 100)
+    append_digit(buf, off, (uint8_t) (value / 100));
   if (value >= 10)
-    append_digit(buf, off, (uint8_t) (value / 10));
+    append_digit(buf, off, (uint8_t) ((value / 10) % 10));
   append_digit(buf, off, (uint8_t) (value % 10));
 }
 
@@ -239,19 +239,23 @@ static void parse_mappings(config_nio_state_t *state, const char *text)
     *c++ = 0;
 
     unit = atoi(a);
-    if (unit < 0 || unit >= FNCTL_MAX_UNITS || !b[0])
-      continue;
-
     {
-      config_nio_mapping_t mapping;
+      long slot;
+      char *end;
+      slot = strtol(b, &end, 10);
+      if (unit < 0 || unit >= FNCTL_MAX_UNITS || *end || slot < 0 || slot > 255)
+        continue;
 
-      memset(&mapping, 0, sizeof(mapping));
-      mapping.valid = 1;
-      strncpy(mapping.uri, b, CONFIG_NIO_URI_MAX);
-      mapping.uri[CONFIG_NIO_URI_MAX] = 0;
-      mapping.readonly =
-        (uint8_t) (strcmp(c, "ro") == 0 || strcmp(c, "RO") == 0);
-      (void) config_nio_mapping_set(state, (uint8_t) unit, &mapping);
+      {
+        config_nio_mapping_t mapping;
+
+        memset(&mapping, 0, sizeof(mapping));
+        mapping.valid = 1;
+        mapping.slot = (uint8_t) slot;
+        mapping.readonly =
+          (uint8_t) (strcmp(c, "ro") == 0 || strcmp(c, "RO") == 0);
+        (void) config_nio_mapping_set(state, (uint8_t) unit, &mapping);
+      }
     }
   }
 }
@@ -339,11 +343,11 @@ int config_nio_save_mappings(const config_nio_state_t *state)
 
     if (!config_nio_mapping_get(state, unit, &mapping) || !mapping.valid)
       continue;
-    if ((uint16_t) (off + strlen(mapping.uri) + 8) >= sizeof(store_buf))
+    if ((uint16_t) (off + 10) >= sizeof(store_buf))
       return 0;
     append_digit((char *) store_buf, &off, unit);
     store_buf[off++] = '\t';
-    append_text((char *) store_buf, &off, mapping.uri);
+    append_uint((char *) store_buf, &off, mapping.slot);
     store_buf[off++] = '\t';
     store_buf[off++] = mapping.readonly ? 'r' : 'r';
     store_buf[off++] = mapping.readonly ? 'o' : 'w';
@@ -353,163 +357,104 @@ int config_nio_save_mappings(const config_nio_state_t *state)
   return appstore_write_text(CONFIG_NIO_KEY_MAPPINGS, (const char *) store_buf);
 }
 
-static int load_slots_text(uint8_t *exists)
+static const char *slot_key(uint8_t index)
 {
-  return appstore_read_text(CONFIG_NIO_KEY_SLOTS, (char *) slot_store_buf,
-                            sizeof(slot_store_buf), exists);
+  slot_key_buf[0] = 's';
+  slot_key_buf[1] = 'l';
+  slot_key_buf[2] = 'o';
+  slot_key_buf[3] = 't';
+  slot_key_buf[4] = '-';
+  slot_key_buf[5] = (char) ('0' + index / 100);
+  slot_key_buf[6] = (char) ('0' + (index / 10) % 10);
+  slot_key_buf[7] = (char) ('0' + index % 10);
+  slot_key_buf[8] = 0;
+  return slot_key_buf;
 }
 
-static int slot_line(const char *uri, const char *mode, char *out, uint16_t cap)
+int config_nio_read_slot(uint8_t index, config_nio_slot_t *slot)
 {
-  uint16_t mode_len;
+  fn_appstore_read_t rr;
+  uint8_t result;
   uint16_t uri_len;
-  if (!uri || !uri[0] || strchr(uri, '\t') || strchr(uri, '\n') || strchr(uri, '\r'))
+  if (!slot)
     return 0;
-  if (!mode || !mode[0])
-    mode = "rw";
-  mode_len = (uint16_t) strlen(mode);
-  uri_len = (uint16_t) strlen(uri);
-  if ((uint16_t) (mode_len + uri_len + 3) > cap)
+  memset(slot, 0, sizeof(*slot));
+  result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS, slot_key(index), 0,
+                            appstore_buf, CONFIG_NIO_APPSTORE_READ_MAX, &rr);
+  if (result != FN_OK)
     return 0;
-  memcpy(out, mode, mode_len);
-  out[mode_len] = '\t';
-  memcpy(out + mode_len + 1, uri, uri_len);
-  out[mode_len + 1 + uri_len] = '\n';
-  out[mode_len + 2 + uri_len] = 0;
-  return 1;
-}
-
-static int find_slot_line(char *text, uint16_t index, char **start, char **end)
-{
-  uint16_t current;
-  char *p;
-  current = 0;
-  p = text;
-  while (*p) {
-    char *line_end;
-    line_end = strchr(p, '\n');
-    if (!line_end)
-      line_end = p + strlen(p);
-    else
-      line_end++;
-    if (current == index) {
-      *start = p;
-      *end = line_end;
-      return 1;
-    }
-    current++;
-    p = line_end;
-  }
-  return 0;
-}
-
-static int replace_slot_line(uint16_t index, const char *replacement)
-{
-  uint8_t exists;
-  char *start;
-  char *end;
-  uint16_t total;
-  uint16_t old_len;
-  uint16_t new_len;
-  if (!load_slots_text(&exists))
+  if ((rr.flags & FN_APPSTORE_READ_EXISTS) == 0)
+    return 1;
+  if (rr.bytes_read < 3 || appstore_buf[0] != 1)
     return 0;
-  if (!find_slot_line((char *) slot_store_buf, index, &start, &end))
-    return 0;
-  total = (uint16_t) strlen((char *) slot_store_buf);
-  old_len = (uint16_t) (end - start);
-  new_len = (uint16_t) strlen(replacement);
-  if ((uint32_t) total - old_len + new_len >= sizeof(slot_store_buf))
-    return 0;
-  memmove(start + new_len, end, (size_t) (total - (end - (char *) slot_store_buf) + 1));
-  if (new_len)
-    memcpy(start, replacement, new_len);
-  return appstore_write_text(CONFIG_NIO_KEY_SLOTS, (const char *) slot_store_buf);
+  uri_len = (uint16_t) (rr.bytes_read - 2);
+  if (uri_len > CONFIG_NIO_URI_MAX)
+    uri_len = CONFIG_NIO_URI_MAX;
+  slot->enabled = 1;
+  strcpy(slot->mode, (appstore_buf[1] & 0x01) ? "r" : "rw");
+  memcpy(slot->uri, appstore_buf + 2, uri_len);
+  slot->uri[uri_len] = 0;
+  return slot->uri[0] != 0;
 }
 
 int config_nio_refresh_slots(config_nio_state_t *state)
 {
-  uint8_t exists;
-  const char *p;
-  uint16_t index;
-  uint8_t visible;
   uint8_t i;
-  if (!state || !load_slots_text(&exists))
+  if (!state)
     return 0;
-  for (i = 0; i < FNCTL_MAX_UNITS; i++)
-    memset(&state->slots[i], 0, sizeof(state->slots[i]));
-  p = (const char *) slot_store_buf;
-  index = 0;
-  visible = 0;
-  while (*p) {
-    const char *end;
-    const char *tab;
-    uint16_t len;
-    end = strchr(p, '\n');
-    if (!end)
-      end = p + strlen(p);
-    len = (uint16_t) (end - p);
-    if (index >= state->slot_start && visible < FNCTL_MAX_UNITS) {
-      config_nio_slot_t *slot;
-      uint16_t mode_len;
-      uint16_t uri_len;
-      slot = &state->slots[visible++];
-      tab = (const char *) memchr(p, '\t', len);
-      if (tab) {
-        mode_len = (uint16_t) (tab - p);
-        if (mode_len > 3) mode_len = 3;
-        memcpy(slot->mode, p, mode_len);
-        slot->mode[mode_len] = 0;
-        uri_len = (uint16_t) (len - (tab + 1 - p));
-        if (uri_len > CONFIG_NIO_URI_MAX) uri_len = CONFIG_NIO_URI_MAX;
-        memcpy(slot->uri, tab + 1, uri_len);
-        slot->uri[uri_len] = 0;
-        slot->enabled = slot->uri[0] != 0;
-      }
+  state->slot_count = 0;
+  for (i = 0; i < FNCTL_MAX_UNITS; i++) {
+    uint16_t absolute;
+    absolute = (uint16_t) state->slot_start + i;
+    if (absolute > 255) {
+      memset(&state->slots[i], 0, sizeof(state->slots[i]));
+      continue;
     }
-    index++;
-    p = *end ? end + 1 : end;
+    if (!config_nio_read_slot((uint8_t) absolute, &state->slots[i]))
+      return 0;
+    if (state->slots[i].enabled)
+      state->slot_count++;
   }
-  if (state->slot_start >= index && index) {
-    state->slot_start = (uint16_t) (((index - 1) / FNCTL_MAX_UNITS) * FNCTL_MAX_UNITS);
-    return config_nio_refresh_slots(state);
-  }
-  state->slot_count = visible;
-  state->slots_more = index > (uint16_t) (state->slot_start + visible);
+  state->slots_more = state->slot_start < 248;
   return 1;
 }
 
-int config_nio_add_slot(config_nio_state_t *state, const char *uri, const char *mode)
+int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
+                          const char *uri, const char *mode)
 {
-  uint8_t exists;
-  uint16_t total;
-  if (!state || !slot_line(uri, mode, line_buf, sizeof(line_buf)) ||
-      !load_slots_text(&exists))
+  fn_appstore_delete_t dr;
+  fn_appstore_write_t wr;
+  uint16_t uri_len;
+  uint16_t len;
+  if (!state || !uri || !uri[0])
     return 0;
-  total = (uint16_t) strlen((char *) slot_store_buf);
-  if ((uint32_t) total + strlen(line_buf) >= sizeof(slot_store_buf))
+  uri_len = (uint16_t) strlen(uri);
+  if (uri_len > CONFIG_NIO_URI_MAX || (size_t) uri_len + 2 > sizeof(appstore_buf))
     return 0;
-  strcpy((char *) slot_store_buf + total, line_buf);
-  if (!appstore_write_text(CONFIG_NIO_KEY_SLOTS, (const char *) slot_store_buf))
+  appstore_buf[0] = 1;
+  appstore_buf[1] = (uint8_t) (mode && strcmp(mode, "r") == 0 ? 0x01 : 0x00);
+  memcpy(appstore_buf + 2, uri, uri_len);
+  len = (uint16_t) (uri_len + 2);
+  /*
+   * AppStore writes are offset writes and do not truncate an existing value.
+   * Remove the old record first so replacing a long URI with a shorter URI
+   * cannot retain a stale suffix.
+   */
+  if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
+    return 0;
+  if (fn_appstore_write(&appstore_io, CONFIG_NIO_NS, slot_key(index), 0,
+                        appstore_buf, len, &wr) != FN_OK ||
+      wr.bytes_written != len)
     return 0;
   return config_nio_refresh_slots(state);
 }
 
-int config_nio_update_slot(config_nio_state_t *state, uint8_t visible_index,
-                           const char *uri, const char *mode)
+int config_nio_delete_slot(config_nio_state_t *state, uint8_t index)
 {
-  if (!state || visible_index >= state->slot_count ||
-      !slot_line(uri, mode, line_buf, sizeof(line_buf)))
+  fn_appstore_delete_t dr;
+  if (!state)
     return 0;
-  if (!replace_slot_line((uint16_t) (state->slot_start + visible_index), line_buf))
-    return 0;
-  return config_nio_refresh_slots(state);
-}
-
-int config_nio_delete_slot(config_nio_state_t *state, uint8_t visible_index)
-{
-  if (!state || visible_index >= state->slot_count)
-    return 0;
-  if (!replace_slot_line((uint16_t) (state->slot_start + visible_index), ""))
+  if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
     return 0;
   return config_nio_refresh_slots(state);
 }

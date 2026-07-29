@@ -1,10 +1,26 @@
 #include "config_nio.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static char uri_buf[FNSVC_MAX_URI + 1];
 static char status_buf[48];
+
+static int prompt_slot(uint8_t *out)
+{
+  char input[8];
+  long value;
+  char *end;
+  if (!config_nio_ui_prompt("Save in slot 0-255", input, sizeof(input)) ||
+      !input[0])
+    return 0;
+  value = strtol(input, &end, 10);
+  if (*end || value < 0 || value > 255)
+    return 0;
+  *out = (uint8_t) value;
+  return 1;
+}
 
 static void list_cb(uint8_t is_dir, const char *name, uint32_t size,
                     uint32_t mtime, void *ctx)
@@ -152,6 +168,7 @@ int config_nio_browse(config_nio_state_t *state, uint8_t host)
         config_nio_set_status(state, "Use A to assign files to a slot");
       }
     } else if ((key == 'a' || key == 'A') && state->entry_count > 0) {
+      uint8_t slot;
       if (state->entries[selected].is_dir & CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED) {
         config_nio_set_status(state, "Name too long for this client");
         continue;
@@ -166,7 +183,9 @@ int config_nio_browse(config_nio_state_t *state, uint8_t host)
         config_nio_set_status(state, "URI is too long");
         continue;
       }
-      if (!config_nio_add_slot(state, uri_buf, "rw")) {
+      if (!prompt_slot(&slot))
+        continue;
+      if (!config_nio_write_slot(state, slot, uri_buf, "rw")) {
         config_nio_set_status(state, "Unable to save slot");
         continue;
       }

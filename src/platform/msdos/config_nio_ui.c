@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <dos.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -25,6 +26,7 @@
 
 static char dos_drive_label[16];
 static char dos_uri_edit[CONFIG_NIO_URI_MAX + 1];
+static char dos_slot_edit[5];
 static uint8_t dos_selected_slot;
 static uint8_t dos_selected_unit;
 static uint8_t dos_focus;
@@ -831,7 +833,8 @@ static const char *dos_slot_status(config_nio_state_t *state)
 {
   sprintf(dos_status_buf, "%s pane active, slot %u, drive %u",
           dos_focus ? "Drives" : "Slots",
-          (unsigned) dos_selected_slot, (unsigned) dos_selected_unit);
+          (unsigned) (state->slot_start + dos_selected_slot),
+          (unsigned) dos_selected_unit);
   return dos_status_buf;
 }
 
@@ -879,8 +882,8 @@ static void dos_draw_mapping_line(WINDOW *win, int y, config_nio_state_t *state,
   dos_set_list_attr(win, selected, active);
   mvwaddnstr(win, y, 2, dos_drive_label, 5);
   if (mapping->valid) {
-    wprintw(win, "-> %s ", mapping->readonly ? "ro" : "rw");
-    dos_curses_print_tail(win, mapping->uri, 14);
+    wprintw(win, "->%u %s", (unsigned) mapping->slot,
+            mapping->readonly ? " ro" : " rw");
   } else {
     dos_curses_print_clip(win, "(unassigned)", 17);
   }
@@ -949,12 +952,13 @@ static void dos_draw_slots_screen(config_nio_state_t *state)
   dos_clear_window(dos_main_win, DOS_COLOR_BODY);
   dos_win_title_focus(dos_main_win, " Slots ", dos_focus == 0);
   for (i = 0; i < FNCTL_MAX_UNITS; i++)
-    dos_draw_slot_line(dos_main_win, (int) i + 2, i, &state->slots[i],
+    dos_draw_slot_line(dos_main_win, (int) i + 2,
+                       (uint8_t) (state->slot_start + i), &state->slots[i],
                        dos_selected_slot == i, dos_focus == 0, 1);
   wnoutrefresh(dos_main_win);
 
   dos_draw_side_mappings(state);
-  dos_draw_status("Slots: N/P page, E edits, Enter assigns entry to drive",
+  dos_draw_status("Slots: N/P page, J jumps, E edits, Enter assigns",
                   dos_slot_status(state));
 }
 
@@ -1779,7 +1783,9 @@ static void dos_assign_selected_entry(config_nio_state_t *state)
     config_nio_set_status(state, "URI is too long");
     return;
   }
-  if (!config_nio_add_slot(state, dos_uri_buf, "rw")) {
+  if (!config_nio_write_slot(state,
+                             (uint8_t) (state->slot_start + dos_selected_slot),
+                             dos_uri_buf, "rw")) {
     config_nio_set_status(state, "Unable to save slot");
     return;
   }
@@ -2097,14 +2103,27 @@ static int dos_handle_key(config_nio_state_t *state, int key)
     }
   } else if (dos_screen == DOS_SCREEN_SLOTS) {
     if ((key == 'n' || key == 'N') && state->slots_more) {
-      state->slot_start = (uint16_t) (state->slot_start + state->slot_count);
+      state->slot_start = (uint8_t) (state->slot_start + FNCTL_MAX_UNITS);
       dos_selected_slot = 0;
       (void) config_nio_refresh_slots(state);
     } else if ((key == 'p' || key == 'P') && state->slot_start) {
       state->slot_start = state->slot_start > FNCTL_MAX_UNITS
-                        ? (uint16_t) (state->slot_start - FNCTL_MAX_UNITS) : 0;
+                        ? (uint8_t) (state->slot_start - FNCTL_MAX_UNITS) : 0;
       dos_selected_slot = 0;
       (void) config_nio_refresh_slots(state);
+    } else if (key == 'j' || key == 'J') {
+      char *end;
+      long slot;
+      dos_slot_edit[0] = 0;
+      if (dos_curses_prompt(" Jump ", "Slot 0-255", dos_slot_edit,
+                            sizeof(dos_slot_edit))) {
+        slot = strtol(dos_slot_edit, &end, 10);
+        if (!*end && slot >= 0 && slot <= 255) {
+          state->slot_start = (uint8_t) (((uint8_t) slot) & 0xF8);
+          dos_selected_slot = (uint8_t) slot & 0x07;
+          (void) config_nio_refresh_slots(state);
+        }
+      }
     } else if (key == DOS_KEY_ENTER || key == '\n' || key == '\r') {
       dos_map_selected(state);
     } else if (dos_focus == 1 && key >= '0' && key <= '7' &&
@@ -2142,8 +2161,8 @@ static void dos_map_selected(config_nio_state_t *state)
     return;
   }
   state->mappings[dos_selected_unit].valid = 1;
-  strcpy(state->mappings[dos_selected_unit].uri,
-         state->slots[dos_selected_slot].uri);
+  state->mappings[dos_selected_unit].slot =
+    (uint8_t) (state->slot_start + dos_selected_slot);
   if (!state->mappings[dos_selected_unit].readonly)
     state->mappings[dos_selected_unit].readonly = 0;
   (void) config_nio_save_mappings(state);
@@ -2173,7 +2192,8 @@ static void dos_clear_mapping(config_nio_state_t *state)
 
 static void dos_clear_slot(config_nio_state_t *state)
 {
-  if (config_nio_delete_slot(state, dos_selected_slot)) {
+  if (config_nio_delete_slot(state,
+                             (uint8_t) (state->slot_start + dos_selected_slot))) {
     config_nio_set_status(state, "Slot cleared");
   } else {
     config_nio_set_status(state, "Unable to clear slot");
@@ -2188,7 +2208,9 @@ static void dos_edit_slot(config_nio_state_t *state)
       !dos_uri_edit[0])
     return;
 
-  if (config_nio_update_slot(state, dos_selected_slot, dos_uri_edit, "rw")) {
+  if (config_nio_write_slot(state,
+                            (uint8_t) (state->slot_start + dos_selected_slot),
+                            dos_uri_edit, "rw")) {
     config_nio_set_status(state, "Slot saved");
   } else {
     config_nio_set_status(state, "Unable to save slot");
