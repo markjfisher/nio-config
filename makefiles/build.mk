@@ -7,16 +7,15 @@ FUJINET_NIO_LIB ?= ../fujinet-nio-lib
 include makefiles/targets.mk
 
 FNSVC_LIST_MAX_PAYLOAD ?= 420
-ifeq ($(TARGET),bbc)
+ifneq ($(filter $(TARGET),bbc master),)
 FNSVC_LIST_MAX_PAYLOAD := 250
 endif
 
 SRC_DIR := src
-STATE_MODEL_bbc := external
-STATE_MODEL := $(if $(STATE_MODEL_$(TARGET)),$(STATE_MODEL_$(TARGET)),embedded)
 APP_INCLUDE_DIR := include/common
 CONFIG_NIO_INCLUDE_DIR := include
 PLATFORM_INCLUDE_DIR := include/platform/$(PLATFORM)
+TARGET_INCLUDE_DIR := include/target/$(TARGET)
 NIO_INCLUDE_DIR := $(FUJINET_NIO_LIB)/include
 BUILD_DIR ?= build
 TARGET_BUILD_DIR := $(BUILD_DIR)/$(TARGET)
@@ -26,6 +25,7 @@ DISK_DIR := $(TARGET_BUILD_DIR)/disk
 
 CONFIG_NIO_PROGRAMS := config-nio
 SUPPORT_PROGRAMS_bbc := keycode
+SUPPORT_PROGRAMS_master := keycode
 SUPPORT_PROGRAMS := $(SUPPORT_PROGRAMS_$(TARGET))
 PROGRAMS := $(CONFIG_NIO_PROGRAMS) $(SUPPORT_PROGRAMS)
 PROGRAM_BINS := $(PROGRAMS:%=$(BIN_DIR)/%$(PROGRAM_EXT))
@@ -42,20 +42,30 @@ else
 $(error Unknown compiler family '$(COMPILER_FAMILY)' for TARGET=$(TARGET))
 endif
 
-CONFIG_NIO_SRCS := \
-	$(wildcard $(SRC_DIR)/*.c) \
-	$(wildcard $(SRC_DIR)/common/*.c) \
-	$(wildcard $(SRC_DIR)/model/$(STATE_MODEL)/*.c) \
-	$(wildcard $(SRC_DIR)/platform/$(PLATFORM)/*.c)
-CONFIG_NIO_ASM_SRCS := \
-	$(wildcard $(SRC_DIR)/common/*.s) \
-	$(wildcard $(SRC_DIR)/model/$(STATE_MODEL)/*.s) \
-	$(wildcard $(SRC_DIR)/platform/$(PLATFORM)/*.s)
+rwildcard=$(wildcard $(1)$(2))$(foreach d,$(wildcard $(1)*),$(call rwildcard,$d/,$(2)))
+
+CONFIG_NIO_EXTRA_SRC_DIRS_msdos := $(SRC_DIR)/platform/portable
+CONFIG_NIO_EXTRA_SRC_DIRS_atari := $(SRC_DIR)/platform/portable
+CONFIG_NIO_EXTRA_SRC_DIRS_linux := $(SRC_DIR)/platform/portable
+CONFIG_NIO_EXTRA_SRC_DIRS := $(CONFIG_NIO_EXTRA_SRC_DIRS_$(TARGET))
+
+CONFIG_NIO_SRC_DIRS := \
+	$(SRC_DIR)/common \
+	$(CONFIG_NIO_EXTRA_SRC_DIRS) \
+	$(SRC_DIR)/platform/$(PLATFORM) \
+	$(SRC_DIR)/target/$(TARGET)
+
+CONFIG_NIO_SRCS := $(wildcard $(SRC_DIR)/*.c)
+CONFIG_NIO_ASM_SRCS :=
+$(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_SRCS += $(call rwildcard,$(dir)/,*.c)))
+$(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_ASM_SRCS += $(call rwildcard,$(dir)/,*.s)))
+CONFIG_NIO_SRCS := $(foreach src,$(CONFIG_NIO_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
+CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))
 DEPENDS := $(SUPPORT_OBJS:.o=.d) $(CONFIG_NIO_OBJS:.o=.d)
 
-ifeq ($(TARGET),bbc)
+ifneq ($(filter $(TARGET),bbc master),)
 CONFIG_NIO_BBC_TEMPLATE_INPUTS := \
 	bbc/assets/config-nio-templates/CNHOSTS \
 	bbc/assets/config-nio-templates/CNBROW \
@@ -81,7 +91,7 @@ CONFIG_NIO_DEPS := $(PDCURSES_MSDOS_LIB)
 CFLAGS += -i=$(PDCURSES_DIR)
 endif
 
-ifeq ($(TARGET),bbc)
+ifneq ($(filter $(TARGET),bbc master),)
 include makefiles/config-nio-bbc.mk
 endif
 
@@ -103,7 +113,7 @@ $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 
 $(OBJ_DIR)/%.o: %.s | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
-	ca65 -t $(TARGET) $(ASMFLAGS) -I /home/markf/dev/nio/fujinet-nio-workspace/repos/cc65/libsrc/bbc -o $@ $<
+	ca65 -t $(TOOLCHAIN_TARGET) $(ASMFLAGS) -I /home/markf/dev/nio/fujinet-nio-workspace/repos/cc65/libsrc/bbc -o $@ $<
 
 $(BIN_DIR)/keycode$(PROGRAM_EXT): $(OBJ_DIR)/$(SRC_DIR)/support/keycode.o | $(BIN_DIR)
 	$(call link_program)
@@ -111,9 +121,19 @@ $(BIN_DIR)/keycode$(PROGRAM_EXT): $(OBJ_DIR)/$(SRC_DIR)/support/keycode.o | $(BI
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): $(CONFIG_NIO_OBJS) $(CONFIG_NIO_ASM_OBJS) $(CONFIG_NIO_DEPS) $(NIO_LIB_FILE) | $(BIN_DIR)
 	$(call link_program)
 
-ifeq ($(TARGET),bbc)
-BBC_CONFIG_NIO_START_ADDRESS ?= 0x1900
-BBC_CONFIG_NIO_HIMEM ?= 0x7C00
+ifneq ($(filter $(TARGET),bbc master),)
+BBC_CONFIG_NIO_START_ADDRESS_bbc ?= 0x1900
+BBC_CONFIG_NIO_START_ADDRESS_master ?= 0x0E00
+BBC_CONFIG_NIO_HIMEM_bbc ?= 0x7C00
+BBC_CONFIG_NIO_HIMEM_master ?= 0x8000
+BBC_CONFIG_NIO_SHADOW_MODE_bbc ?= 0
+BBC_CONFIG_NIO_SHADOW_MODE_master ?= 1
+BBC_CONFIG_NIO_XRAM_TABLES_bbc ?= 0
+BBC_CONFIG_NIO_XRAM_TABLES_master ?= 1
+BBC_CONFIG_NIO_START_ADDRESS ?= $(BBC_CONFIG_NIO_START_ADDRESS_$(TARGET))
+BBC_CONFIG_NIO_HIMEM ?= $(BBC_CONFIG_NIO_HIMEM_$(TARGET))
+BBC_CONFIG_NIO_SHADOW_MODE ?= $(BBC_CONFIG_NIO_SHADOW_MODE_$(TARGET))
+BBC_CONFIG_NIO_XRAM_TABLES ?= $(BBC_CONFIG_NIO_XRAM_TABLES_$(TARGET))
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DCONFIG_NIO_EXTERNAL_TABLE_STATE
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DFNSVC_MOUNT_URI_MAX=160 -DFNSVC_MOUNT_MODE_MAX=4
 ifeq ($(BBC_CONFIG_NIO_SHADOW_MODE),1)
@@ -123,7 +143,7 @@ ifeq ($(BBC_CONFIG_NIO_XRAM_TABLES),1)
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DCONFIG_NIO_BBC_XRAM_TABLES
 $(CONFIG_NIO_ASM_OBJS): ASMFLAGS += -DCONFIG_NIO_BBC_XRAM_TABLES
 endif
-$(BIN_DIR)/config-nio$(PROGRAM_EXT): LDFLAGS := -t $(TARGET) --start-addr $(BBC_CONFIG_NIO_START_ADDRESS) -Wl -D,__HIMEM__=$(BBC_CONFIG_NIO_HIMEM)
+$(BIN_DIR)/config-nio$(PROGRAM_EXT): LDFLAGS := -t $(TOOLCHAIN_TARGET) --start-addr $(BBC_CONFIG_NIO_START_ADDRESS) -Wl -D,__HIMEM__=$(BBC_CONFIG_NIO_HIMEM)
 endif
 
 $(OBJ_DIR):
