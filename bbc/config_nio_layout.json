@@ -17,7 +17,7 @@
     "assign": { "x": 3, "y": 9, "title_y": 9, "hint_y": 10, "rows_y": 12, "count": 8, "uri_width": 30, "clear_width": 34, "clear_rows": 12 }
   },
   "slots": {
-    "drives": { "x": 1, "y": 5, "count": 4, "basename_width": 26, "empty_width": 29 },
-    "slots": { "x": 1, "y": 12, "count": 8, "uri_width": 35 }
+    "drives": { "x": 3, "y": 7, "count": 4, "basename_width": 24, "empty_width": 24 },
+    "slots": { "x": 3, "y": 12, "count": 8, "uri_width": 30 }
   }
 }

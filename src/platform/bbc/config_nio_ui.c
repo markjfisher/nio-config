@@ -353,7 +353,7 @@ static void draw_slots(config_nio_state_t *state)
   for (i = 0; i < BBC_DRIVE_COUNT; i++) {
     gotoxy(CONFIG_NIO_BBC_SLOTS_DRIVES_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_Y + i));
     cputc((!slots_focus && i == selected_drive) ? '>' : ' ');
-    cputs("Drive");
+    cputs("D");
     cputc((char) ('0' + i));
     cputc(' ');
     if (config_nio_mapping_get(state, i, &mapping) && mapping.valid) {
@@ -766,7 +766,7 @@ void config_nio_run(config_nio_state_t *state)
     } else if (key == 's' || key == 'S') {
       current_screen = SCREEN_SLOTS;
       redraw = 1;
-    } else if (key == 'x' || key == 'X') {
+    } else if (key == 'm' || key == 'M') {
       (void) config_nio_mount_mappings(state);
       done = 1;
     } else if (current_screen == SCREEN_HOSTS) {
