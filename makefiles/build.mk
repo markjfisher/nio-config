@@ -59,6 +59,9 @@ CONFIG_NIO_SRCS := $(wildcard $(SRC_DIR)/*.c)
 CONFIG_NIO_ASM_SRCS :=
 $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_SRCS += $(call rwildcard,$(dir)/,*.c)))
 $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_ASM_SRCS += $(call rwildcard,$(dir)/,*.s)))
+ifneq ($(filter $(TARGET),bbc master),)
+CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/fnsvc_set_mount.s,$(CONFIG_NIO_ASM_SRCS))
+endif
 CONFIG_NIO_SRCS := $(foreach src,$(CONFIG_NIO_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
 CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))

@@ -13,7 +13,7 @@
 #define BBC_HOST_TEXT_X (CONFIG_NIO_BBC_HOSTS_ROWS_X + 4)
 #define BBC_HOST_ROW_WIDTH (CONFIG_NIO_BBC_HOSTS_ROWS_URI_WIDTH + 4)
 #define BBC_URI_WORK_MAX (CONFIG_NIO_URI_MAX + 1)
-#define BBC_EDIT_BUF_SIZE (CONFIG_NIO_URI_MAX + 1)
+#define BBC_EDIT_BUF_SIZE 97
 #define BBC_LIST_PAYLOAD 120
 #define BBC_BROWSE_PAGE_STACK 6
 #define key_is_quit(key) ((key) == 'q' || (key) == 'Q' || (key) == CH_ESC)
@@ -22,6 +22,16 @@
 #define key_is_left(key) ((key) == CH_CURS_LEFT)
 #define key_is_right(key) ((key) == CH_CURS_RIGHT)
 #define key_is_escape(key) ((key) == CH_ESC)
+
+static uint8_t key_is_next_page(int key)
+{
+  return (uint8_t) (key_is_right(key) || key == 'n' || key == 'N' || key == '>');
+}
+
+static uint8_t key_is_previous_page(int key)
+{
+  return (uint8_t) (key_is_left(key) || key == 'p' || key == 'P' || key == '<');
+}
 
 enum {
   SCREEN_HOSTS,
@@ -32,11 +42,23 @@ enum {
 extern uint8_t config_nio_store_buf[];
 #define edit_buf ((char *) config_nio_store_buf)
 static char uri_buf[BBC_URI_WORK_MAX];
+
+static void put_slot_index(uint8_t value)
+{
+  uint8_t hundreds = 0;
+  uint8_t tens = 0;
+  while (value >= 100) { value = (uint8_t) (value - 100); hundreds++; }
+  while (value >= 10) { value = (uint8_t) (value - 10); tens++; }
+  if (hundreds) cputc((char) ('0' + hundreds));
+  if (hundreds || tens) cputc((char) ('0' + tens));
+  cputc((char) ('0' + value));
+}
 static uint8_t current_screen;
 static uint8_t selected_host;
 static uint8_t selected_entry;
 static uint8_t selected_drive;
 static uint8_t selected_slot;
+static uint8_t assign_slot_start;
 static uint8_t slots_focus;
 static uint8_t browse_host;
 static uint8_t hosts_start;
@@ -358,11 +380,11 @@ static void draw_slots(config_nio_state_t *state)
     cputc(' ');
     if (config_nio_mapping_get(state, i, &mapping) && mapping.valid) {
       cputs("S");
-      cputc((char) ('0' + mapping.slot));
+      put_slot_index(mapping.slot);
       cputc(' ');
       cputc(mapping.readonly ? 'R' : 'W');
       cputc(' ');
-      if (config_nio_slot_get(state, mapping.slot, &slot))
+      if (config_nio_read_slot(mapping.slot, &slot) && slot.enabled)
         put_basename(slot.uri, CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH);
       else
         put_fixed("", CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH);
@@ -375,7 +397,7 @@ static void draw_slots(config_nio_state_t *state)
     gotoxy(CONFIG_NIO_BBC_SLOTS_SLOTS_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_SLOTS_Y + i));
     cputc((slots_focus && i == selected_slot) ? '>' : ' ');
     cputc(' ');
-    cputc((char) ('0' + i));
+    put_slot_index((uint8_t) (state->slot_start + i));
     cputc(' ');
     if (config_nio_slot_get(state, i, &slot))
       put_tail(slot.uri, CONFIG_NIO_BBC_SLOTS_SLOTS_URI_WIDTH);
@@ -402,49 +424,75 @@ static void set_assign_marker(uint8_t row, uint8_t selected)
   cputc(selected ? '>' : ' ');
 }
 
-static int prompt_assign_slot(config_nio_state_t *state, uint8_t *slot_out)
+static void draw_assign_slots(config_nio_state_t *state, uint8_t slot)
 {
   uint8_t i;
-  uint8_t slot;
   config_nio_slot_t slot_state;
 
-  if (!slot_out)
-    return 0;
-
+  state->slot_start = assign_slot_start;
   (void) config_nio_refresh_slots(state);
-  for (i = 0; i < CONFIG_NIO_BBC_BROWSE_ASSIGN_CLEAR_ROWS; i++)
-    clear_field(CONFIG_NIO_BBC_BROWSE_ASSIGN_X, (uint8_t) (CONFIG_NIO_BBC_BROWSE_ASSIGN_Y + i), CONFIG_NIO_BBC_BROWSE_ASSIGN_CLEAR_WIDTH);
-  text_at(CONFIG_NIO_BBC_BROWSE_ASSIGN_X, CONFIG_NIO_BBC_BROWSE_ASSIGN_TITLE_Y, "Assign file to slot");
-  text_at(CONFIG_NIO_BBC_BROWSE_ASSIGN_X, CONFIG_NIO_BBC_BROWSE_ASSIGN_HINT_Y, "RET choose  ESC cancel");
-  slot = selected_slot;
   for (i = 0; i < FNCTL_MAX_UNITS; i++) {
-    gotoxy(CONFIG_NIO_BBC_BROWSE_ASSIGN_X, (uint8_t) (CONFIG_NIO_BBC_BROWSE_ASSIGN_ROWS_Y + i));
+    gotoxy(CONFIG_NIO_BBC_BROWSE_ASSIGN_X,
+           (uint8_t) (CONFIG_NIO_BBC_BROWSE_ASSIGN_ROWS_Y + i));
     cputc(i == slot ? '>' : ' ');
     cputc(' ');
-    cputc((char) ('0' + i));
+    put_slot_index((uint8_t) (assign_slot_start + i));
     cputc(' ');
     if (config_nio_slot_get(state, i, &slot_state))
       put_tail(slot_state.uri, CONFIG_NIO_BBC_BROWSE_ASSIGN_URI_WIDTH);
     else
       put_fixed("", CONFIG_NIO_BBC_BROWSE_ASSIGN_URI_WIDTH);
   }
+}
+
+static int prompt_assign_slot(config_nio_state_t *state, uint8_t *slot_out)
+{
+  uint8_t i;
+  uint8_t slot;
+  uint8_t saved_slot_start;
+
+  if (!slot_out)
+    return 0;
+
+  saved_slot_start = state->slot_start;
+  for (i = 0; i < CONFIG_NIO_BBC_BROWSE_ASSIGN_CLEAR_ROWS; i++)
+    clear_field(CONFIG_NIO_BBC_BROWSE_ASSIGN_X, (uint8_t) (CONFIG_NIO_BBC_BROWSE_ASSIGN_Y + i), CONFIG_NIO_BBC_BROWSE_ASSIGN_CLEAR_WIDTH);
+  text_at(CONFIG_NIO_BBC_BROWSE_ASSIGN_X, CONFIG_NIO_BBC_BROWSE_ASSIGN_TITLE_Y, "Assign file to slot");
+  text_at(CONFIG_NIO_BBC_BROWSE_ASSIGN_X, CONFIG_NIO_BBC_BROWSE_ASSIGN_HINT_Y, "P/N page  RET choose  ESC cancel");
+  slot = selected_slot;
+  draw_assign_slots(state, slot);
 
   for (;;) {
     int key;
     uint8_t old;
 
     key = cgetc();
-    if (key_is_escape(key))
+    if (key_is_escape(key)) {
+      state->slot_start = saved_slot_start;
+      (void) config_nio_refresh_slots(state);
       return 0;
+    }
     if (key == '\r' || key == '\n') {
       selected_slot = slot;
-      *slot_out = slot;
+      *slot_out = (uint8_t) (assign_slot_start + slot);
+      state->slot_start = saved_slot_start;
       return 1;
     }
     if (key >= '0' && key <= '7') {
       selected_slot = (uint8_t) (key - '0');
-      *slot_out = selected_slot;
+      *slot_out = (uint8_t) (assign_slot_start + selected_slot);
+      state->slot_start = saved_slot_start;
       return 1;
+    }
+    if (key_is_next_page(key) && assign_slot_start < 248) {
+      assign_slot_start = (uint8_t) (assign_slot_start + FNCTL_MAX_UNITS);
+      draw_assign_slots(state, slot);
+      continue;
+    }
+    if (key_is_previous_page(key) && assign_slot_start) {
+      assign_slot_start = (uint8_t) (assign_slot_start - FNCTL_MAX_UNITS);
+      draw_assign_slots(state, slot);
+      continue;
     }
     old = slot;
     if (key_is_up(key) && slot > 0)
@@ -524,7 +572,7 @@ static void assign_selected_file(config_nio_state_t *state)
     config_nio_set_status(state, "URI long");
     return;
   }
-  if (!fnsvc_set_mount(slot, uri_buf, "rw", 1)) {
+  if (!config_nio_write_slot(state, slot, uri_buf, "rw")) {
     config_nio_set_status(state, "Save fail");
     return;
   }
@@ -667,6 +715,16 @@ static uint8_t handle_slots(config_nio_state_t *state, int key)
     return 0;
   }
   if (slots_focus) {
+    if (key_is_next_page(key) && state->slots_more) {
+      state->slot_start = (uint8_t) (state->slot_start + FNCTL_MAX_UNITS);
+      (void) config_nio_refresh_slots(state);
+      return 1;
+    } else if (key_is_previous_page(key) && state->slot_start) {
+      state->slot_start = state->slot_start >= FNCTL_MAX_UNITS
+                        ? (uint8_t) (state->slot_start - FNCTL_MAX_UNITS) : 0;
+      (void) config_nio_refresh_slots(state);
+      return 1;
+    }
     if (key_is_up(key) && selected_slot > 0) {
       old = selected_slot;
       selected_slot--;
@@ -679,16 +737,28 @@ static uint8_t handle_slots(config_nio_state_t *state, int key)
       set_slot_marker(old, 0);
       set_slot_marker(selected_slot, 1);
       return 0;
+    } else if (key >= '0' && key < '0' + BBC_DRIVE_COUNT) {
+      uint8_t unit = (uint8_t) (key - '0');
+
+      mapping.valid = 1;
+      mapping.slot = (uint8_t) (state->slot_start + selected_slot);
+      mapping.readonly = 0;
+      (void) config_nio_mapping_set(state, unit, &mapping);
+      (void) config_nio_save_mappings(state);
+      selected_drive = unit;
+      config_nio_set_status(state, "Map saved");
+      return 1;
     } else if (key == 'c' || key == 'C') {
       uint8_t unit;
 
-      if (!fnsvc_set_mount(selected_slot, "", "rw", 0)) {
+      uint8_t absolute = (uint8_t) (state->slot_start + selected_slot);
+      if (!config_nio_delete_slot(state, absolute)) {
         config_nio_set_status(state, "Clear fail");
         return 1;
       }
       for (unit = 0; unit < FNCTL_MAX_UNITS; unit++) {
         if (config_nio_mapping_get(state, unit, &mapping) &&
-            mapping.valid && mapping.slot == selected_slot)
+            mapping.valid && mapping.slot == absolute)
           (void) config_nio_mapping_clear(state, unit);
       }
       (void) config_nio_save_mappings(state);
@@ -713,14 +783,6 @@ static uint8_t handle_slots(config_nio_state_t *state, int key)
     set_drive_marker(old, 0);
     set_drive_marker(selected_drive, 1);
     return 0;
-  } else if (key >= '0' && key <= '7') {
-    mapping.valid = 1;
-    mapping.slot = (uint8_t) (key - '0');
-    mapping.readonly = 0;
-    (void) config_nio_mapping_set(state, selected_drive, &mapping);
-    (void) config_nio_save_mappings(state);
-    config_nio_set_status(state, "Map saved");
-    return 1;
   } else if (key == 'r' || key == 'R') {
     if (config_nio_mapping_get(state, selected_drive, &mapping) &&
         mapping.valid) {
@@ -748,6 +810,7 @@ void config_nio_run(config_nio_state_t *state)
   hosts_start = 0;
   selected_drive = 0;
   selected_slot = 0;
+  assign_slot_start = 0;
   slots_focus = 0;
   done = 0;
   show_hosts(state);

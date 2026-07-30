@@ -19,7 +19,7 @@
 
 XRAM_BANK       = 7
 HOST_MAX        = 16
-HOST_SIZE       = $81
+HOST_SIZE       = $61
 HOST_BASE_LO    = $00
 HOST_BASE_HI    = $80
 MAPPING_MAX     = 8
@@ -52,10 +52,14 @@ _config_nio_bbc_build_mappings:
         stx     ptr2+1
         lda     ptr2
         ora     ptr2+1
-        beq     @zero
+        bne     :+
+        jmp     @zero
+:
         lda     tmp1
-        cmp     #7
-        bcc     @zero
+        cmp     #9
+        bcs     :+
+        jmp     @zero
+:
 
 .ifdef CONFIG_NIO_BBC_XRAM_TABLES
         lda     #MAPPING_BASE_LO
@@ -79,7 +83,7 @@ _config_nio_bbc_build_mappings:
         beq     @next
         lda     tmp2
         clc
-        adc     #7
+        adc     #9
         cmp     tmp1
         bcc     @room
         beq     @room
@@ -94,6 +98,32 @@ _config_nio_bbc_build_mappings:
         jsr     put_out
         ldy     #1
         lda     (ptr1),y                ; slot
+        sta     tmp4
+        ldx     #'0'
+@hundreds:
+        lda     tmp4
+        cmp     #100
+        bcc     @hundreds_done
+        sbc     #100
+        sta     tmp4
+        inx
+        bne     @hundreds
+@hundreds_done:
+        txa
+        jsr     put_out
+        ldx     #'0'
+@tens:
+        lda     tmp4
+        cmp     #10
+        bcc     @tens_done
+        sbc     #10
+        sta     tmp4
+        inx
+        bne     @tens
+@tens_done:
+        txa
+        jsr     put_out
+        lda     tmp4
         clc
         adc     #'0'
         jsr     put_out
@@ -121,7 +151,8 @@ _config_nio_bbc_build_mappings:
         inc     tmp3
         lda     tmp3
         cmp     #MAPPING_MAX
-        bcc     @row
+        bcs     @done
+        jmp     @row
 @done:
         jsr     end_tables
         lda     tmp2
@@ -281,14 +312,20 @@ _config_nio_bbc_parse_mappings:
 @line:
         lda     tmp2
         cmp     tmp1
-        bcs     @done
+        bcc     :+
+        jmp     @done
+:
 
         ldy     tmp2
         lda     (ptr2),y
         cmp     #'0'
-        bcc     @skip
+        bcs     :+
+        jmp     @skip
+:
         cmp     #'8'
-        bcs     @skip
+        bcc     :+
+        jmp     @skip
+:
         sec
         sbc     #'0'
         sta     tmp3                    ; unit
@@ -299,15 +336,30 @@ _config_nio_bbc_parse_mappings:
         bne     @skip
         inc     tmp2
 
+        lda     #0
+        sta     tmp4                    ; slot accumulator
+        ldx     #3
+@slot_digit:
         jsr     next_char
         cmp     #'0'
         bcc     @skip
-        cmp     #'8'
+        cmp     #('9'+1)
         bcs     @skip
         sec
         sbc     #'0'
-        sta     tmp4                    ; slot
+        sta     ptr3
+        lda     tmp4
+        asl     a
+        sta     ptr3+1                  ; 2x
+        asl     a
+        asl     a                       ; 8x
+        clc
+        adc     ptr3+1
+        adc     ptr3
+        sta     tmp4
         inc     tmp2
+        dex
+        bne     @slot_digit
 
         jsr     next_char
         cmp     #$09

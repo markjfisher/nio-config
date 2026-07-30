@@ -18,8 +18,8 @@ typedef struct {
 
 typedef struct {
   uint8_t enabled;
-  char uri[CONFIG_NIO_URI_MAX + 1];
-  char mode[4];
+  /* BBC slot table is an eight-row display cache, not authoritative storage. */
+  char uri[29];
 } config_nio_slot_t;
 
 typedef struct {
@@ -33,6 +33,9 @@ typedef struct {
 
 typedef struct {
   uint8_t host_count;
+  uint8_t slot_start;
+  uint8_t slot_count;
+  uint8_t slots_more;
   config_nio_prefs_t prefs;
   uint8_t entry_count;
   uint16_t entry_total;

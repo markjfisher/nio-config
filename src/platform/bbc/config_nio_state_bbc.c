@@ -7,11 +7,14 @@ void __fastcall__ bbc_oscli(const char *cmd);
 void config_nio_bbc_copy_slot_display_uri(char *dst, uint16_t cap,
                                           const char *src);
 
-static fnsvc_mount_t mount_tmp;
 static char mount_cmd[16];
 
 static int bbc_apply_drive_mapping(uint8_t unit, uint8_t slot)
 {
+  uint8_t hundreds = 0;
+  uint8_t tens = 0;
+  while (slot >= 100) { slot = (uint8_t) (slot - 100); hundreds++; }
+  while (slot >= 10) { slot = (uint8_t) (slot - 10); tens++; }
   mount_cmd[0] = 'F';
   mount_cmd[1] = 'M';
   mount_cmd[2] = 'O';
@@ -19,45 +22,40 @@ static int bbc_apply_drive_mapping(uint8_t unit, uint8_t slot)
   mount_cmd[4] = 'N';
   mount_cmd[5] = 'T';
   mount_cmd[6] = ' ';
-  mount_cmd[7] = (char) ('0' + slot);
-  mount_cmd[8] = ' ';
-  mount_cmd[9] = (char) ('0' + unit);
-  mount_cmd[10] = 13;
-  mount_cmd[11] = 0;
+  mount_cmd[7] = (char) ('0' + hundreds);
+  mount_cmd[8] = (char) ('0' + tens);
+  mount_cmd[9] = (char) ('0' + slot);
+  mount_cmd[10] = ' ';
+  mount_cmd[11] = (char) ('0' + unit);
+  mount_cmd[12] = 13;
+  mount_cmd[13] = 0;
   bbc_oscli(mount_cmd);
   return 1;
 }
 
 int config_nio_refresh_slots(config_nio_state_t *state)
 {
-  uint8_t slot;
+  uint8_t row;
   int ok;
 
   if (!state)
     return 0;
 
   ok = 1;
-  for (slot = 0; slot < FNCTL_MAX_UNITS; slot++) {
+  state->slot_count = 0;
+  for (row = 0; row < FNCTL_MAX_UNITS; row++) {
     config_nio_slot_t slot_state;
+    uint16_t absolute = (uint16_t) state->slot_start + row;
 
     memset(&slot_state, 0, sizeof(slot_state));
-    if (fnsvc_get_mount(slot, &mount_tmp)) {
-      uint16_t n;
-
-      slot_state.enabled = mount_tmp.enabled;
-      config_nio_bbc_copy_slot_display_uri(slot_state.uri,
-                                           sizeof(slot_state.uri),
-                                           mount_tmp.uri);
-      n = (uint16_t) strlen(mount_tmp.mode);
-      if (n > 3)
-        n = 3;
-      memcpy(slot_state.mode, mount_tmp.mode, n);
-      slot_state.mode[n] = 0;
-    } else {
+    if (absolute <= 255 &&
+        config_nio_read_slot((uint8_t) absolute, &slot_state)) {
+      if (slot_state.enabled) state->slot_count++;
+    } else
       ok = 0;
-    }
-    (void) config_nio_slot_set(state, slot, &slot_state);
+    (void) config_nio_slot_set(state, row, &slot_state);
   }
+  state->slots_more = state->slot_start < 248;
   return ok;
 }
 
@@ -77,12 +75,13 @@ int config_nio_mount_mappings(config_nio_state_t *state)
       continue;
     if (!mapping.valid)
       continue;
-    if (mapping.slot >= FNCTL_MAX_UNITS)
-      continue;
-    if (!fnsvc_get_mount(mapping.slot, &mount_tmp) ||
-        !mount_tmp.enabled || !mount_tmp.uri[0]) {
+    {
+      config_nio_slot_t slot;
+      if (!config_nio_read_slot(mapping.slot, &slot) ||
+          !slot.enabled || !slot.uri[0]) {
       config_nio_set_status(state, "Mapped slot is empty");
       continue;
+      }
     }
     if (!bbc_apply_drive_mapping(unit, mapping.slot)) {
       config_nio_set_status(state, "Drive map failed");

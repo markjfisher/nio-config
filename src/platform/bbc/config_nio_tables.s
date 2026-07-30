@@ -26,12 +26,15 @@ XRAM_BANK       = 7
 XRAM_BASE_HI    = $80
 
 HOST_MAX        = 16
-HOST_SIZE       = $81
+; Host entries are roots, while composed file URIs use the separate 160-byte
+; browse buffer.  Capping roots at 96 characters releases 512 bytes for the
+; cc65 software stack on an unexpanded BBC.
+HOST_SIZE       = $61
 
 SLOT_MAX        = 8
 SLOT_BASE_LO    = $10
 SLOT_BASE_HI    = $88
-SLOT_SIZE       = $86
+SLOT_SIZE       = $1E
 
 MAPPING_MAX     = 8
 MAPPING_BASE_LO = $40

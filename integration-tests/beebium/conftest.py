@@ -211,7 +211,7 @@ def real_fujinet_config_nio(pytestconfig):
             "-i",
             str(source_dir),
             "-o",
-            str(image_dir / "navtest.ssd"),
+            str(image_dir / "longer-navtest.ssd"),
             "-t",
             "NAVTEST",
         ],

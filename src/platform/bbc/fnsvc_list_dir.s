@@ -43,7 +43,9 @@ ENTRY_BASE_HI   = $8C
 ENTRY_SIZE      = $20
 ENTRY_NAME_MAX  = 30
 
-STATE_ENTRY_COUNT = 2
+; config_nio_state_t external layout: host_count, slot_start, slot_count,
+; slots_more, prefs, then entry_count.
+STATE_ENTRY_COUNT = 5
 
         .bss
 call_block:

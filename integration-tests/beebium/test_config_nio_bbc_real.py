@@ -44,13 +44,15 @@ def select_browse_entry(bbc, needle: str) -> None:
 
 
 def assert_slots_page_clean(screen: str) -> None:
-    assert "Drive mappings" in screen
+    assert "Drive Mappings" in screen
     assert "Slots" in screen
     assert "fujinet.diller.org" not in screen
     assert "fujinet.online" not in screen
 
 
-def test_config_nio_bbc_browse_assign_mount_real_fujinet(beebium_config_nio, screen_evidence):
+def test_config_nio_bbc_browse_assign_mount_real_fujinet(
+    beebium_config_nio, real_fujinet_config_nio, screen_evidence
+):
     bbc = beebium_config_nio
 
     command(bbc, "*FUJI")
@@ -71,34 +73,53 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(beebium_config_nio, scr
     select_browse_entry(bbc, "images")
     press_key(bbc, "\r", wait=0.5)
 
-    wait_for_screen_text(bbc, "navtest.ssd", evidence=screen_evidence, label="browse image")
-    select_browse_entry(bbc, "navtest.ssd")
+    wait_for_screen_text(bbc, "longer-navtest.ssd", evidence=screen_evidence, label="browse image")
+    select_browse_entry(bbc, "longer-navtest.ssd")
     press_key(bbc, "A")
     wait_for_screen_text(bbc, "Assign file to slot")
-    press_key(bbc, "3", wait=0.5)
-    wait_for_screen_text(bbc, "navtest.ssd", evidence=screen_evidence, label="slot assigned")
+    press_key(bbc, "N", wait=0.4)  # slots 8-15
+    press_key(bbc, "N", wait=0.4)  # slots 16-23
+    rows = read_mode7_screen(bbc)
+    assert "16" in rows[12]
+    assert "23" in rows[19]
+    if screen_evidence is not None:
+        screen_evidence.capture(
+            bbc, "assign third sparse page", screen=dump_screen(bbc)
+        )
+    press_key(bbc, "3", wait=0.5)  # visible row 3 => absolute slot 19
+    wait_for_screen_text(bbc, "longer-navtest.ssd", evidence=screen_evidence, label="slot assigned")
 
     press_key(bbc, "S", wait=0.5)
     slots_screen = wait_for_screen_text(
         bbc,
-        "Drive mappings",
+        "Drive Mappings",
         evidence=screen_evidence,
         label="slots before mapping",
     )
     assert_slots_page_clean(slots_screen)
 
-    tap_matrix(bbc, *ARROW_DOWN)
-    press_key(bbc, "3", wait=0.5)
+    # The catalogue screen has independent paging state, so move it to the
+    # page containing slot 19 before mapping visible row 3.
+    press_key(bbc, "\t")
+    press_key(bbc, "N", wait=0.4)
+    press_key(bbc, "N", wait=0.4)
+    rows = read_mode7_screen(bbc)
+    assert "19" in rows[15]
+    assert "longer-navtest.ssd" in rows[15]
+    press_key(bbc, "1", wait=0.5)  # selected slot 19 -> drive 1
     slots_screen = wait_for_screen_text(
         bbc,
-        "Drive1 S3",
+        "D1 S19",
         evidence=screen_evidence,
         label="slots drive1 mapped",
     )
-    assert "navtest.ssd" in slots_screen
+    assert "longer-navtest.ssd" in slots_screen
     assert_slots_page_clean(slots_screen)
 
-    press_key(bbc, "X", wait=1.0)
+    press_key(bbc, "M", wait=1.0)
+    assert real_fujinet_config_nio.wait_for_log("dev=0xFC cmd=0x01", timeout=4.0), (
+        real_fujinet_config_nio.log_text()[-4000:]
+    )
     command(bbc, "*. :1.$")
     wait_for_screen_text(bbc, "HELLO", evidence=screen_evidence, label="mounted drive catalogue")
 
