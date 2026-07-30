@@ -157,6 +157,9 @@ def real_fujinet_config_nio(pytestconfig):
     appstore = data_root / "FujiNet" / "app-store" / "v1" / "config-nio"
     appstore.mkdir(parents=True, exist_ok=True)
     (appstore / "hosts.bin").write_bytes(b"sd0:/\nfujinet.diller.org\nfujinet.online\n")
+    (appstore / "slot-011.bin").write_bytes(
+        b"\x01\x00/192.168.1.101/bbc/blank.ssd"
+    )
 
     source_dir = fn.run_dir / "ssd-source"
     source_dir.mkdir(parents=True, exist_ok=True)

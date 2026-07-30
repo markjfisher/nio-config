@@ -26,6 +26,15 @@ def press_key(bbc, text: str, wait: float = 0.15) -> None:
     time.sleep(wait)
 
 
+def wait_for_screen_without_text(bbc, text: str, timeout: float = 8.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if text not in dump_screen(bbc):
+            return
+        time.sleep(0.02)
+    raise TimeoutError(f"Text {text!r} remained on screen\n{dump_screen(bbc)}")
+
+
 def row_with_text(bbc, needle: str) -> int:
     wanted = needle.upper()
     for index, row in enumerate(read_mode7_screen(bbc)):
@@ -77,6 +86,16 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
     select_browse_entry(bbc, "longer-navtest.ssd")
     press_key(bbc, "A")
     wait_for_screen_text(bbc, "Assign file to slot")
+    press_key(bbc, "N", wait=0.4)  # slots 8-15
+    wait_for_screen_text(bbc, "blank.ssd")
+    rows = read_mode7_screen(bbc)
+    assert "11" in rows[15]
+    assert "blank.ssd" in rows[15]
+    press_key(bbc, "P", wait=0.4)  # slots 0-7
+    wait_for_screen_without_text(bbc, "blank.ssd")
+    rows = read_mode7_screen(bbc)
+    assert "3" in rows[15]
+    assert rows[15][35] == " ", rows[15]
     press_key(bbc, "N", wait=0.4)  # slots 8-15
     press_key(bbc, "N", wait=0.4)  # slots 16-23
     rows = read_mode7_screen(bbc)

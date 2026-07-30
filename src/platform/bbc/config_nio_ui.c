@@ -432,8 +432,9 @@ static void draw_assign_slots(config_nio_state_t *state, uint8_t slot)
   state->slot_start = assign_slot_start;
   (void) config_nio_refresh_slots(state);
   for (i = 0; i < FNCTL_MAX_UNITS; i++) {
-    gotoxy(CONFIG_NIO_BBC_BROWSE_ASSIGN_X,
-           (uint8_t) (CONFIG_NIO_BBC_BROWSE_ASSIGN_ROWS_Y + i));
+    clear_field(CONFIG_NIO_BBC_BROWSE_ASSIGN_X,
+                (uint8_t) (CONFIG_NIO_BBC_BROWSE_ASSIGN_ROWS_Y + i),
+                CONFIG_NIO_BBC_BROWSE_ASSIGN_CLEAR_WIDTH);
     cputc(i == slot ? '>' : ' ');
     cputc(' ');
     put_slot_index((uint8_t) (assign_slot_start + i));
