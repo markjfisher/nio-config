@@ -12,6 +12,10 @@
 
 #define CONFIG_NIO_STORE_BUF_SIZE (CONFIG_NIO_TEXT_MAX + 1)
 #define CONFIG_NIO_APPSTORE_READ_MAX (CONFIG_NIO_APPSTORE_BUF_SIZE - 10)
+#define CONFIG_NIO_MAPPINGS_VERSION 1
+#define CONFIG_NIO_MAPPING_VALID 0x01
+#define CONFIG_NIO_MAPPING_READONLY 0x02
+#define CONFIG_NIO_MAPPINGS_SIZE (1 + FNCTL_MAX_UNITS * 2)
 
 static uint8_t store_buf[CONFIG_NIO_STORE_BUF_SIZE];
 static uint8_t appstore_buf[CONFIG_NIO_APPSTORE_BUF_SIZE];
@@ -214,50 +218,54 @@ static void parse_hosts(config_nio_state_t *state, const char *text)
   }
 }
 
-static void parse_mappings(config_nio_state_t *state, const char *text)
+static void parse_mappings(config_nio_state_t *state, const uint8_t *data,
+                           uint16_t len)
 {
-  const char *p;
   uint8_t i;
 
   for (i = 0; i < FNCTL_MAX_UNITS; i++)
     (void) config_nio_mapping_clear(state, i);
-  p = text;
-  while (next_line(&p, line_buf, sizeof(line_buf))) {
-    char *a;
-    char *b;
-    char *c;
-    int unit;
 
-    a = line_buf;
-    b = strchr(a, '\t');
-    if (!b)
+  if (!data || len != CONFIG_NIO_MAPPINGS_SIZE ||
+      data[0] != CONFIG_NIO_MAPPINGS_VERSION)
+    return;
+
+  for (i = 0; i < FNCTL_MAX_UNITS; i++) {
+    uint8_t flags;
+    config_nio_mapping_t mapping;
+
+    flags = data[1 + i * 2];
+    if ((flags & CONFIG_NIO_MAPPING_VALID) == 0)
       continue;
-    *b++ = 0;
-    c = strchr(b, '\t');
-    if (!c)
-      continue;
-    *c++ = 0;
-
-    unit = atoi(a);
-    {
-      long slot;
-      char *end;
-      slot = strtol(b, &end, 10);
-      if (unit < 0 || unit >= FNCTL_MAX_UNITS || *end || slot < 0 || slot > 255)
-        continue;
-
-      {
-        config_nio_mapping_t mapping;
-
-        memset(&mapping, 0, sizeof(mapping));
-        mapping.valid = 1;
-        mapping.slot = (uint8_t) slot;
-        mapping.readonly =
-          (uint8_t) (strcmp(c, "ro") == 0 || strcmp(c, "RO") == 0);
-        (void) config_nio_mapping_set(state, (uint8_t) unit, &mapping);
-      }
-    }
+    memset(&mapping, 0, sizeof(mapping));
+    mapping.valid = 1;
+    mapping.slot = data[2 + i * 2];
+    mapping.readonly =
+      (uint8_t) ((flags & CONFIG_NIO_MAPPING_READONLY) != 0);
+    (void) config_nio_mapping_set(state, i, &mapping);
   }
+}
+
+static int appstore_read_mappings(config_nio_state_t *state, uint8_t *exists)
+{
+  fn_appstore_read_t rr;
+  uint8_t result;
+
+  if (exists)
+    *exists = 0;
+  result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS,
+                            CONFIG_NIO_KEY_MAPPINGS, 0, appstore_buf,
+                            CONFIG_NIO_MAPPINGS_SIZE, &rr);
+  if (result != FN_OK)
+    return 0;
+  if ((rr.flags & FN_APPSTORE_READ_EXISTS) == 0)
+    return 1;
+  if (exists)
+    *exists = 1;
+  if ((rr.flags & FN_APPSTORE_READ_EOF) == 0)
+    return 1;
+  parse_mappings(state, appstore_buf, rr.bytes_read);
+  return 1;
 }
 
 static void parse_prefs(config_nio_state_t *state, const char *text)
@@ -333,28 +341,32 @@ int config_nio_save_hosts(const config_nio_state_t *state)
 
 int config_nio_save_mappings(const config_nio_state_t *state)
 {
+  fn_appstore_delete_t dr;
+  fn_appstore_write_t wr;
   uint8_t unit;
-  uint16_t off;
 
-  off = 0;
-  store_buf[0] = 0;
+  store_buf[0] = CONFIG_NIO_MAPPINGS_VERSION;
+  memset(&store_buf[1], 0, CONFIG_NIO_MAPPINGS_SIZE - 1);
   for (unit = 0; unit < FNCTL_MAX_UNITS; unit++) {
     config_nio_mapping_t mapping;
+    uint8_t flags;
 
     if (!config_nio_mapping_get(state, unit, &mapping) || !mapping.valid)
       continue;
-    if ((uint16_t) (off + 10) >= sizeof(store_buf))
-      return 0;
-    append_digit((char *) store_buf, &off, unit);
-    store_buf[off++] = '\t';
-    append_uint((char *) store_buf, &off, mapping.slot);
-    store_buf[off++] = '\t';
-    store_buf[off++] = mapping.readonly ? 'r' : 'r';
-    store_buf[off++] = mapping.readonly ? 'o' : 'w';
-    store_buf[off++] = '\n';
-    store_buf[off] = 0;
+    flags = CONFIG_NIO_MAPPING_VALID;
+    if (mapping.readonly)
+      flags |= CONFIG_NIO_MAPPING_READONLY;
+    store_buf[1 + unit * 2] = flags;
+    store_buf[2 + unit * 2] = mapping.slot;
   }
-  return appstore_write_text(CONFIG_NIO_KEY_MAPPINGS, (const char *) store_buf);
+
+  if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS,
+                         CONFIG_NIO_KEY_MAPPINGS, &dr) != FN_OK)
+    return 0;
+  return fn_appstore_write(&appstore_io, CONFIG_NIO_NS,
+                           CONFIG_NIO_KEY_MAPPINGS, 0, store_buf,
+                           CONFIG_NIO_MAPPINGS_SIZE, &wr) == FN_OK &&
+         wr.bytes_written == CONFIG_NIO_MAPPINGS_SIZE;
 }
 
 static const char *slot_key(uint8_t index)
@@ -517,11 +529,8 @@ int config_nio_load(config_nio_state_t *state)
     (void) config_nio_save_hosts(state);
   }
 
-  if (!appstore_read_text(CONFIG_NIO_KEY_MAPPINGS, (char *) store_buf,
-                          sizeof(store_buf), &exists))
+  if (!appstore_read_mappings(state, &exists))
     return 0;
-  if (exists)
-    parse_mappings(state, (const char *) store_buf);
 
   if (!appstore_read_text(CONFIG_NIO_KEY_PREFS, (char *) store_buf,
                           sizeof(store_buf), &exists))

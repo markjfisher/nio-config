@@ -53,6 +53,15 @@ static void put_slot_index(uint8_t value)
   if (hundreds || tens) cputc((char) ('0' + tens));
   cputc((char) ('0' + value));
 }
+
+static uint8_t slot_index_width(uint8_t value)
+{
+  if (value >= 100)
+    return 3;
+  if (value >= 10)
+    return 2;
+  return 1;
+}
 static uint8_t current_screen;
 static uint8_t selected_host;
 static uint8_t selected_entry;
@@ -386,9 +395,15 @@ static void draw_slots(config_nio_state_t *state)
       cputc(mapping.readonly ? 'R' : 'W');
       cputc(' ');
       if (config_nio_read_slot(mapping.slot, &slot) && slot.enabled)
-        put_basename(slot.uri, CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH);
+        put_basename(
+          slot.uri,
+          (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH -
+                     (slot_index_width(mapping.slot) - 1)));
       else
-        put_fixed("", CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH);
+        put_fixed(
+          "",
+          (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH -
+                     (slot_index_width(mapping.slot) - 1)));
     } else {
       cputs("--");
       put_fixed("", CONFIG_NIO_BBC_SLOTS_DRIVES_EMPTY_WIDTH);

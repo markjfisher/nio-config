@@ -157,6 +157,64 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
     wait_for_screen_text(bbc, "HELLO", evidence=screen_evidence, label="mounted drive catalogue")
 
 
+def test_config_nio_bbc_shows_cli_mapping_and_canonical_slot_uri(
+    beebium_config_nio, real_fujinet_config_nio, screen_evidence
+):
+    bbc = beebium_config_nio
+
+    command(bbc, "*FUJI")
+    command(bbc, "*FHOST host:/cfg/images")
+    command(bbc, "*FIN 100 longer-navtest.ssd")
+    command(bbc, "*FMOUNT 100 1")
+    command(bbc, "*. :1")
+    wait_for_screen_text(
+        bbc, "HELLO", evidence=screen_evidence, label="cli mapping mounted"
+    )
+
+    appstore = (
+        real_fujinet_config_nio.run_dir
+        / "fujinet-data"
+        / "FujiNet"
+        / "app-store"
+        / "v1"
+        / "config-nio"
+    )
+    assert (appstore / "slot-100.bin").read_bytes() == (
+        b"\x01\x00host:/cfg/images/longer-navtest.ssd"
+    )
+    mappings = (appstore / "mappings.bin").read_bytes()
+    assert len(mappings) == 17
+    assert mappings[0] == 1
+    assert mappings[3:5] == bytes((1, 100))  # drive 1: valid/RW, slot 100
+
+    type_text(bbc, "*CONFNIO\r")
+    wait_for_screen_text(bbc, "sd0:/")
+    press_key(bbc, "S", wait=0.5)
+    screen = wait_for_screen_text(
+        bbc,
+        "D1 S100 W",
+        evidence=screen_evidence,
+        label="cli mapping shown in config",
+    )
+    assert "longer-navtest.ssd" in screen
+
+    rows = read_mode7_screen(bbc)
+    drive1 = rows[8]
+    drive2 = rows[9]
+    # A three-digit slot must leave the template's right-edge graphics cells
+    # untouched, exactly as an empty drive row does.
+    assert drive1[-2:] == drive2[-2:], (drive1, drive2)
+
+    press_key(bbc, "Q", wait=0.5)
+    command(bbc, "*FUMOUNT 1")
+    mappings = (appstore / "mappings.bin").read_bytes()
+    assert mappings[3:5] == b"\x00\x00"
+    command(bbc, "*. :1")
+    wait_for_screen_text(
+        bbc, "No disk", evidence=screen_evidence, label="cli mapping unmounted"
+    )
+
+
 def test_config_nio_bbc_large_directory_renders_real_fujinet(beebium_config_nio, screen_evidence):
     bbc = beebium_config_nio
 
