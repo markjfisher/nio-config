@@ -16,6 +16,7 @@
 .endif
 
         .import popa, popax
+        .import _fnsvc_bbc_resp_buf
 .ifdef CONFIG_NIO_BBC_XRAM_TABLES
         .import _config_nio_xram_begin
         .import _config_nio_xram_end
@@ -31,7 +32,8 @@ HOST_MAX        = 16
 ; cc65 software stack on an unexpanded BBC.
 HOST_SIZE       = $61
 
-SLOT_MAX        = 8
+SLOT_VISIBLE_MAX = 8
+SLOT_MAX        = 16
 SLOT_BASE_LO    = $10
 SLOT_BASE_HI    = $88
 SLOT_SIZE       = $1E
@@ -51,7 +53,7 @@ ENTRY_SIZE      = $20
 _config_nio_bbc_hosts:
         .res    HOST_MAX * HOST_SIZE
 _config_nio_bbc_slots:
-        .res    SLOT_MAX * SLOT_SIZE
+        .res    SLOT_VISIBLE_MAX * SLOT_SIZE
 _config_nio_bbc_mappings:
         .res    MAPPING_MAX * MAPPING_SIZE
 _config_nio_bbc_entries:
@@ -140,6 +142,17 @@ host_ptr:
 
 slot_ptr:
         sta     tmp2
+        cmp     #SLOT_VISIBLE_MAX
+        bcc     @active
+        sec
+        sbc     #SLOT_VISIBLE_MAX
+        sta     tmp2
+        lda     #<_fnsvc_bbc_resp_buf
+        sta     ptr1
+        lda     #>_fnsvc_bbc_resp_buf
+        sta     ptr1+1
+        jmp     @offset
+@active:
 .ifdef CONFIG_NIO_BBC_XRAM_TABLES
         lda     #SLOT_BASE_LO
         sta     ptr1
@@ -151,6 +164,7 @@ slot_ptr:
         lda     #>_config_nio_bbc_slots
         sta     ptr1+1
 .endif
+@offset:
         lda     tmp2
         beq     @done
 @loop:  clc
@@ -379,6 +393,7 @@ _config_nio_bbc_slot_set:
         jsr     copy_ram_to_xram
         jmp     return1
 @bad:  jmp     return0
+
 
 ; int config_nio_bbc_mapping_get(uint8_t unit, config_nio_mapping_t *mapping)
 _config_nio_bbc_mapping_get:

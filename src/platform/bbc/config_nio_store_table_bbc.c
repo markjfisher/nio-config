@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 64
-#define CONFIG_NIO_STORE_BUF_SIZE (CONFIG_NIO_URI_MAX + 1)
+#define CONFIG_NIO_STORE_BUF_SIZE (CONFIG_NIO_URI_MAX + 4)
 #define CONFIG_NIO_APPSTORE_READ_MAX (CONFIG_NIO_APPSTORE_BUF_SIZE - 10)
 
 uint16_t __fastcall__ config_nio_bbc_build_mappings(uint8_t *buf, uint16_t cap);
@@ -40,42 +40,6 @@ static const char *slot_key(uint8_t index)
   return slot_key_buf;
 }
 
-int config_nio_read_slot(uint8_t index, config_nio_slot_t *slot)
-{
-  fn_appstore_read_t rr;
-  uint16_t off = 0;
-  uint16_t uri_off = 0;
-  uint8_t first = 1;
-  memset(slot, 0, sizeof(*slot));
-  for (;;) {
-    uint8_t result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS, slot_key(index),
-                                      off, appstore_buf,
-                                      CONFIG_NIO_APPSTORE_READ_MAX, &rr);
-    uint16_t pos = 0;
-    if (result != FN_OK) return 0;
-    if (!(rr.flags & FN_APPSTORE_READ_EXISTS)) return 1;
-    if (first) {
-      if (rr.bytes_read < 2 || appstore_buf[0] != 1) return 0;
-      slot->enabled = 1;
-      pos = 2; first = 0;
-    }
-    while (pos < rr.bytes_read) {
-      char byte = (char) appstore_buf[pos++];
-      if (uri_off + 1 < sizeof(slot->uri)) {
-        slot->uri[uri_off++] = byte;
-      } else {
-        /* This is a display cache: retain the URI tail containing the
-         * filename, rather than the host/path prefix. */
-        memmove(slot->uri, slot->uri + 1, sizeof(slot->uri) - 2);
-        slot->uri[sizeof(slot->uri) - 2] = byte;
-      }
-    }
-    off = (uint16_t) (off + rr.bytes_read);
-    if ((rr.flags & FN_APPSTORE_READ_EOF) || rr.bytes_read == 0) break;
-  }
-  slot->uri[uri_off] = 0;
-  return uri_off != 0;
-}
 
 int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
                           const char *uri, const char *mode)
@@ -88,10 +52,16 @@ int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
   if (!uri_len || uri_len > CONFIG_NIO_URI_MAX) return 0;
   if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
     return 0;
-  appstore_buf[0] = 1;
-  appstore_buf[1] = (uint8_t) (mode && strcmp(mode, "r") == 0);
+  /*
+   * The AppStore client assembles its request in appstore_buf before copying
+   * the supplied data.  Keep the record header in the separate store buffer;
+   * passing appstore_buf as both work buffer and source corrupts byte 1 with
+   * the namespace length before it is copied.
+   */
+  store_buf[0] = 1;
+  store_buf[1] = (uint8_t) (mode && strcmp(mode, "r") == 0);
   if (fn_appstore_write(&appstore_io, CONFIG_NIO_NS, slot_key(index), 0,
-                        appstore_buf, 2, &wr) != FN_OK || wr.bytes_written != 2)
+                        store_buf, 2, &wr) != FN_OK || wr.bytes_written != 2)
     return 0;
   off = 2;
   while (pos < uri_len) {
@@ -102,6 +72,7 @@ int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
         wr.bytes_written != chunk) return 0;
     off = (uint16_t) (off + chunk); pos = (uint16_t) (pos + chunk);
   }
+  config_nio_bbc_invalidate_slot_cache();
   return config_nio_refresh_slots(state);
 }
 
@@ -110,6 +81,7 @@ int config_nio_delete_slot(config_nio_state_t *state, uint8_t index)
   fn_appstore_delete_t dr;
   if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
     return 0;
+  config_nio_bbc_invalidate_slot_cache();
   return config_nio_refresh_slots(state);
 }
 
@@ -269,6 +241,12 @@ int config_nio_load(config_nio_state_t *state)
     return 0;
 
   memset(state, 0, sizeof(*state));
+  /*
+   * BBC transient programs cannot assume that linker BSS contains zeroes:
+   * this memory previously held the utility file and other workspace data.
+   * Make the two-page cache metadata deterministic before its first lookup.
+   */
+  config_nio_bbc_invalidate_slot_cache();
   if (!appstore_read_hosts(state, &exists))
     return 0;
   if (state->host_count == 0) {

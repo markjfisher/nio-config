@@ -57,6 +57,7 @@ int config_nio_bbc_slot_set(uint8_t index, const config_nio_slot_t *slot);
 int config_nio_bbc_mapping_get(uint8_t unit, config_nio_mapping_t *mapping);
 int config_nio_bbc_mapping_set(uint8_t unit, const config_nio_mapping_t *mapping);
 int config_nio_bbc_mapping_clear(uint8_t unit);
+void config_nio_bbc_invalidate_slot_cache(void);
 
 #define config_nio_host_get(state, index, buf, cap) \
   config_nio_bbc_host_get((index), (buf), (cap))

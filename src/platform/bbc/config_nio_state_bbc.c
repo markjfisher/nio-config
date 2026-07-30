@@ -33,32 +33,6 @@ static int bbc_apply_drive_mapping(uint8_t unit, uint8_t slot)
   return 1;
 }
 
-int config_nio_refresh_slots(config_nio_state_t *state)
-{
-  uint8_t row;
-  int ok;
-
-  if (!state)
-    return 0;
-
-  ok = 1;
-  state->slot_count = 0;
-  for (row = 0; row < FNCTL_MAX_UNITS; row++) {
-    config_nio_slot_t slot_state;
-    uint16_t absolute = (uint16_t) state->slot_start + row;
-
-    memset(&slot_state, 0, sizeof(slot_state));
-    if (absolute <= 255 &&
-        config_nio_read_slot((uint8_t) absolute, &slot_state)) {
-      if (slot_state.enabled) state->slot_count++;
-    } else
-      ok = 0;
-    (void) config_nio_slot_set(state, row, &slot_state);
-  }
-  state->slots_more = state->slot_start < 248;
-  return ok;
-}
-
 int config_nio_mount_mappings(config_nio_state_t *state)
 {
   uint8_t unit;

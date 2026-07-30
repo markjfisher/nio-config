@@ -431,9 +431,15 @@ int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
   uri_len = (uint16_t) strlen(uri);
   if (uri_len > CONFIG_NIO_URI_MAX || (size_t) uri_len + 2 > sizeof(appstore_buf))
     return 0;
-  appstore_buf[0] = 1;
-  appstore_buf[1] = (uint8_t) (mode && strcmp(mode, "r") == 0 ? 0x01 : 0x00);
-  memcpy(appstore_buf + 2, uri, uri_len);
+  /*
+   * appstore_buf is the AppStore client's protocol work buffer, so it cannot
+   * also be the write-data source: request-prefix assembly overwrites it
+   * before fn_appstore_write copies the record.  store_buf is already sized
+   * for this record and keeps the source disjoint without adding RAM.
+   */
+  store_buf[0] = 1;
+  store_buf[1] = (uint8_t) (mode && strcmp(mode, "r") == 0 ? 0x01 : 0x00);
+  memcpy(store_buf + 2, uri, uri_len);
   len = (uint16_t) (uri_len + 2);
   /*
    * AppStore writes are offset writes and do not truncate an existing value.
@@ -443,7 +449,7 @@ int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
   if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
     return 0;
   if (fn_appstore_write(&appstore_io, CONFIG_NIO_NS, slot_key(index), 0,
-                        appstore_buf, len, &wr) != FN_OK ||
+                        store_buf, len, &wr) != FN_OK ||
       wr.bytes_written != len)
     return 0;
   return config_nio_refresh_slots(state);

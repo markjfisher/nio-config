@@ -216,7 +216,8 @@ static int fetch_browse_page(config_nio_state_t *state)
   browse_next = browse_start;
   do {
     remaining = (uint8_t) (BBC_BROWSE_PAGE_ROWS - state->entry_count);
-    ok = (uint8_t) fnsvc_config_nio_list_directory_page(state, uri_buf,
+  config_nio_bbc_invalidate_slot_cache();
+  ok = (uint8_t) fnsvc_config_nio_list_directory_page(state, uri_buf,
                                                         fetch_start,
                                                         remaining,
                                                         &next_start,
@@ -562,15 +563,15 @@ static void assign_selected_file(config_nio_state_t *state)
     config_nio_set_status(state, "Name too long");
     return;
   }
-  if (!prompt_assign_slot(state, &slot)) {
-    config_nio_set_status(state, "Bad slot");
-    return;
-  }
   if (!config_nio_host_get(state, browse_host, edit_buf, BBC_EDIT_BUF_SIZE) ||
       !config_nio_compose_uri(edit_buf, state->browse_path,
                               entry.name,
                               uri_buf, sizeof(uri_buf))) {
     config_nio_set_status(state, "URI long");
+    return;
+  }
+  if (!prompt_assign_slot(state, &slot)) {
+    config_nio_set_status(state, "Bad slot");
     return;
   }
   if (!config_nio_write_slot(state, slot, uri_buf, "rw")) {
