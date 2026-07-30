@@ -6,14 +6,8 @@
 #include <string.h>
 
 enum {
-  NIO_DEVICEID_FUJI = 0x70,
   NIO_DEVICEID_DISK = 0xFC,
   NIO_DEVICEID_FILE = 0xFE
-};
-
-enum {
-  NIO_FUJI_GET_MOUNT = 0xFB,
-  NIO_FUJI_SET_MOUNT = 0xFC
 };
 
 enum {
@@ -58,13 +52,6 @@ enum {
 #ifndef FNSVC_LIST_MAX_PAYLOAD
 #define FNSVC_LIST_MAX_PAYLOAD 420
 #endif
-
-static void zero_bytes(void *ptr, uint16_t len)
-{
-  uint8_t *p = (uint8_t *) ptr;
-  while (len--)
-    *p++ = 0;
-}
 
 static int fail(uint8_t error)
 {
@@ -300,91 +287,6 @@ uint8_t fnsvc_last_raw_error(void)
 uint16_t fnsvc_last_response_len(void)
 {
   return last_response_len;
-}
-
-int fnsvc_get_mount(uint8_t slot, fnsvc_mount_t *mount)
-{
-  uint8_t req[1];
-  uint8_t status;
-  uint16_t resp_len;
-  uint16_t off;
-  uint8_t len;
-
-  if (!mount || slot >= FNCTL_MAX_UNITS)
-    return 0;
-  last_error = FNSVC_ERR_NONE;
-  last_status = 0;
-  last_raw_error = 0;
-  last_response_len = 0;
-  zero_bytes(mount, sizeof(*mount));
-  req[0] = slot;
-
-  if (!service_call(NIO_DEVICEID_FUJI, NIO_FUJI_GET_MOUNT,
-                    req, sizeof(req), resp_buf, sizeof(resp_buf), &status, &resp_len))
-    return fail(FNSVC_ERR_TRANSPORT);
-
-  last_status = status;
-  last_response_len = resp_len;
-
-  if (status != FNSVC_STATUS_OK)
-    return fail(FNSVC_ERR_STATUS);
-  if (resp_len < 4)
-    return fail(FNSVC_ERR_SHORT_RESPONSE);
-  if (resp_buf[0] != slot)
-    return fail(FNSVC_ERR_BAD_VERSION);
-
-  mount->enabled = resp_buf[1] & 0x01;
-  off = 3;
-  len = resp_buf[2];
-  if (off + len + 1 > resp_len)
-    return fail(FNSVC_ERR_SHORT_RESPONSE);
-#if FNSVC_MOUNT_URI_MAX < FNSVC_MAX_URI
-  if (len >= sizeof(mount->uri)) len = (uint8_t) (sizeof(mount->uri) - 1);
-#endif
-  memcpy(mount->uri, &resp_buf[off], len);
-  mount->uri[len] = 0;
-  off = (uint16_t) (3 + resp_buf[2]);
-  len = resp_buf[off++];
-  if (off + len > resp_len || len >= sizeof(mount->mode))
-    return fail(FNSVC_ERR_SHORT_RESPONSE);
-  memcpy(mount->mode, &resp_buf[off], len);
-  mount->mode[len] = 0;
-  return 1;
-}
-
-int fnsvc_set_mount(uint8_t slot, const char *uri, const char *mode, uint8_t enabled)
-{
-  uint8_t status;
-  uint16_t resp_len;
-  size_t uri_size = strlen(uri ? uri : "");
-  size_t mode_size = strlen(mode ? mode : "");
-  uint8_t uri_len;
-  uint8_t mode_len;
-  uint16_t off = 0;
-
-  if (slot >= FNCTL_MAX_UNITS || uri_size > FNSVC_MAX_URI ||
-      mode_size > 255 || 4 + uri_size + mode_size > sizeof(req_buf))
-    return 0;
-
-  uri_len = (uint8_t) uri_size;
-  mode_len = (uint8_t) mode_size;
-
-  req_buf[off++] = slot;
-  req_buf[off++] = enabled ? 0x01 : 0x00;
-  req_buf[off++] = uri_len;
-  if (uri_len) {
-    memcpy(&req_buf[off], uri, uri_len);
-    off += uri_len;
-  }
-  req_buf[off++] = mode_len;
-  if (mode_len) {
-    memcpy(&req_buf[off], mode, mode_len);
-    off += mode_len;
-  }
-
-  return service_call(NIO_DEVICEID_FUJI, NIO_FUJI_SET_MOUNT,
-                      req_buf, off, resp_buf, sizeof(resp_buf), &status, &resp_len) &&
-         status == FNSVC_STATUS_OK;
 }
 
 int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly)

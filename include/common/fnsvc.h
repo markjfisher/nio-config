@@ -6,13 +6,6 @@
 #define FNSVC_MAX_URI   255
 #define FNSVC_MAX_PATH  127
 
-#ifndef FNSVC_MOUNT_URI_MAX
-#define FNSVC_MOUNT_URI_MAX FNSVC_MAX_URI
-#endif
-#ifndef FNSVC_MOUNT_MODE_MAX
-#define FNSVC_MOUNT_MODE_MAX 8
-#endif
-
 enum {
   FNSVC_STATUS_OK = 0
 };
@@ -29,12 +22,6 @@ enum {
   FNSVC_ERR_ENTRY_BOUNDS
 };
 
-typedef struct {
-  uint8_t enabled;
-  char uri[FNSVC_MOUNT_URI_MAX + 1];
-  char mode[FNSVC_MOUNT_MODE_MAX];
-} fnsvc_mount_t;
-
 typedef void (*fnsvc_list_cb)(uint8_t is_dir,
                               const char *name,
                               uint32_t size,
@@ -46,8 +33,6 @@ int fnsvc_resolve_path(const char *base_uri, const char *arg,
                        char *resolved_uri, uint16_t resolved_cap,
                        char *display_path, uint16_t display_cap,
                        uint8_t *flags_out);
-int fnsvc_get_mount(uint8_t slot, fnsvc_mount_t *mount);
-int fnsvc_set_mount(uint8_t slot, const char *uri, const char *mode, uint8_t enabled);
 int fnsvc_disk_mount(uint8_t slot, const char *uri, uint8_t readonly);
 int fnsvc_disk_unmount(uint8_t slot);
 int fnsvc_disk_restore_boot(uint8_t slot);

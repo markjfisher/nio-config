@@ -59,9 +59,6 @@ CONFIG_NIO_SRCS := $(wildcard $(SRC_DIR)/*.c)
 CONFIG_NIO_ASM_SRCS :=
 $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_SRCS += $(call rwildcard,$(dir)/,*.c)))
 $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_ASM_SRCS += $(call rwildcard,$(dir)/,*.s)))
-ifneq ($(filter $(TARGET),bbc master),)
-CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/fnsvc_set_mount.s,$(CONFIG_NIO_ASM_SRCS))
-endif
 CONFIG_NIO_SRCS := $(foreach src,$(CONFIG_NIO_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
 CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
@@ -138,7 +135,6 @@ BBC_CONFIG_NIO_HIMEM ?= $(BBC_CONFIG_NIO_HIMEM_$(TARGET))
 BBC_CONFIG_NIO_SHADOW_MODE ?= $(BBC_CONFIG_NIO_SHADOW_MODE_$(TARGET))
 BBC_CONFIG_NIO_XRAM_TABLES ?= $(BBC_CONFIG_NIO_XRAM_TABLES_$(TARGET))
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DCONFIG_NIO_EXTERNAL_TABLE_STATE
-$(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DFNSVC_MOUNT_URI_MAX=160 -DFNSVC_MOUNT_MODE_MAX=4
 ifeq ($(BBC_CONFIG_NIO_SHADOW_MODE),1)
 $(BIN_DIR)/config-nio$(PROGRAM_EXT): CFLAGS += -DCONFIG_NIO_BBC_SHADOW_MODE
 endif
