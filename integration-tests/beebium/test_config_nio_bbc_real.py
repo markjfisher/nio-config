@@ -125,12 +125,12 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
     rows = read_mode7_screen(bbc)
     assert "19" in rows[15]
     assert "longer-navtest.ssd" in rows[15]
-    press_key(bbc, "1", wait=0.5)  # selected slot 19 -> drive 1
+    press_key(bbc, "0", wait=0.5)  # selected slot 19 replaces boot disk in drive 0
     slots_screen = wait_for_screen_text(
         bbc,
-        "D1 S19",
+        "D0 S19",
         evidence=screen_evidence,
-        label="slots drive1 mapped",
+        label="slots drive0 mapped",
     )
     assert "longer-navtest.ssd" in slots_screen
     assert_slots_page_clean(slots_screen)
@@ -139,7 +139,7 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
     assert real_fujinet_config_nio.wait_for_log("dev=0xFC cmd=0x01", timeout=4.0), (
         real_fujinet_config_nio.log_text()[-4000:]
     )
-    command(bbc, "*. :1.$")
+    command(bbc, "*.")
     wait_for_screen_text(bbc, "HELLO", evidence=screen_evidence, label="mounted drive catalogue")
 
 
