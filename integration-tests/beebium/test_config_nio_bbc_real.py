@@ -130,6 +130,10 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
         label="slots before mapping",
     )
     assert_slots_page_clean(slots_screen)
+    # The boot image is an active DiskService mount, not a catalogue mapping.
+    # It must still be visible in the drive pane without inventing a slot entry.
+    assert "D0 BOOT" in slots_screen
+    assert "FN-BOOT.ssd" in slots_screen
 
     # The catalogue screen has independent paging state, so move it to the
     # page containing slot 19 before mapping visible row 3.
@@ -155,6 +159,41 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
     )
     command(bbc, "*.")
     wait_for_screen_text(bbc, "HELLO", evidence=screen_evidence, label="mounted drive catalogue")
+
+
+def test_config_nio_bbc_shows_fboot_runtime_mount(
+    beebium_config_nio, real_fujinet_config_nio, screen_evidence
+):
+    bbc = beebium_config_nio
+
+    command(bbc, "*FUJI")
+    command(bbc, "*FBOOT 3")
+    type_text(bbc, "*CONFNIO\r")
+    wait_for_screen_text(bbc, "sd0:/", evidence=screen_evidence, label="hosts initial")
+    wait_for_screen_text(bbc, "fujinet.diller.org")
+
+    press_key(bbc, "S", wait=0.5)
+    screen = wait_for_screen_text(
+        bbc,
+        "Drive Mappings",
+        evidence=screen_evidence,
+        label="FBOOT runtime mapping",
+    )
+    assert "D3 BOOT FN-BOOT.ssd" in screen
+
+    appstore = (
+        real_fujinet_config_nio.run_dir
+        / "fujinet-data"
+        / "FujiNet"
+        / "app-store"
+        / "v1"
+        / "config-nio"
+    )
+    mappings_path = appstore / "mappings.bin"
+    mappings = mappings_path.read_bytes() if mappings_path.exists() else b""
+    assert len(mappings) == 0 or mappings[0] == 1
+    if mappings:
+        assert mappings[7:9] == b"\x00\x00"  # drive 3 remains catalogue-unassigned
 
 
 def test_config_nio_bbc_shows_cli_mapping_and_canonical_slot_uri(

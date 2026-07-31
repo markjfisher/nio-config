@@ -5,6 +5,8 @@
 #include <conio.h>
 #include <string.h>
 
+#include "fn_bbc_internal.h"
+
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
 #define BBC_ROWS CONFIG_NIO_BBC_SCREEN_HEIGHT
 #define BBC_DRIVE_COUNT 4
@@ -15,6 +17,12 @@
 #define BBC_URI_WORK_MAX (CONFIG_NIO_URI_MAX + 1)
 #define BBC_EDIT_BUF_SIZE 97
 #define BBC_LIST_PAYLOAD 120
+#define NIO_DEVICE_DISK 0xFC
+#define NIO_DISK_LIST_MOUNTS 0x0D
+#define NIO_DISK_LIST_MOUNTS_HEADER 10
+#define BBC_MOUNTS_PAYLOAD 240
+#define NIO_DISK_LIST_MOUNTS_RESPONSE (BBC_MOUNTS_PAYLOAD + NIO_DISK_LIST_MOUNTS_HEADER)
+#define BBC_RUNTIME_NAME_WIDTH 19
 #define BBC_BROWSE_PAGE_STACK 6
 #define key_is_quit(key) ((key) == 'q' || (key) == 'Q' || (key) == CH_ESC)
 #define key_is_up(key) ((key) == CH_CURS_UP || (key) == 'w' || (key) == 'W')
@@ -41,7 +49,62 @@ enum {
 
 extern uint8_t config_nio_store_buf[];
 #define edit_buf ((char *) config_nio_store_buf)
-static char uri_buf[BBC_URI_WORK_MAX];
+char uri_buf[BBC_URI_WORK_MAX];
+
+/* Runtime mounts are deliberately transient: config-nio's persistent mapping
+ * table contains catalogue-slot assignments, while boot/FBOOT mounts are
+ * DiskService state and do not necessarily have a catalogue slot. */
+extern uint8_t fnsvc_bbc_resp_buf[];
+static char *runtime_mount_display(uint8_t unit)
+{
+  uint8_t request[10];
+  uint8_t device_status;
+  uint8_t result;
+  uint16_t response_len;
+  const uint8_t *start;
+  const uint8_t *end;
+  const uint8_t *uri;
+  const uint8_t *name;
+  const uint8_t *p;
+  uint8_t len;
+
+  request[0] = 1;
+  request[1] = 1;
+  request[2] = unit;
+  request[3] = 0;
+  request[4] = unit;
+  request[5] = 0;
+  request[6] = 0;
+  request[7] = 0;
+  request[8] = (uint8_t) (BBC_MOUNTS_PAYLOAD & 0xFF);
+  request[9] = (uint8_t) (BBC_MOUNTS_PAYLOAD >> 8);
+  result = fn_bbc_device_call_raw(
+      NIO_DEVICE_DISK, NIO_DISK_LIST_MOUNTS, request, sizeof(request),
+      fnsvc_bbc_resp_buf, NIO_DISK_LIST_MOUNTS_RESPONSE, &device_status,
+      &response_len);
+  if (result != 0 || device_status != 0 ||
+      response_len < NIO_DISK_LIST_MOUNTS_HEADER ||
+      fnsvc_bbc_resp_buf[0] != 1 || (fnsvc_bbc_resp_buf[1] & 0x02) == 0 ||
+      fnsvc_bbc_resp_buf[6] == 0)
+    return 0;
+
+  start = fnsvc_bbc_resp_buf + NIO_DISK_LIST_MOUNTS_HEADER;
+  end = start + fnsvc_bbc_resp_buf[8];
+  if (fnsvc_bbc_resp_buf[8] < 8 || start[0] != (uint8_t) ('0' + unit) ||
+      start[1] != ':' || start[2] != ' ')
+    return 0;
+  uri = start + 3;
+  while (uri < end && *uri != ' ') uri++;
+  while (uri < end && *uri == ' ') uri++;
+  name = uri;
+  for (p = uri; p < end; p++)
+    if (*p == '/' || *p == ':') name = p + 1;
+  len = (uint8_t) (end - name);
+  if (len > BBC_RUNTIME_NAME_WIDTH) len = BBC_RUNTIME_NAME_WIDTH;
+  memcpy(uri_buf, name, len);
+  uri_buf[len] = 0;
+  return uri_buf;
+}
 
 static void put_slot_index(uint8_t value)
 {
@@ -380,7 +443,6 @@ static void draw_slots(config_nio_state_t *state)
   config_nio_mapping_t mapping;
   config_nio_slot_t slot;
 
-  (void) state;
   load_screen_template("CNSLOTS");
   for (i = 0; i < BBC_DRIVE_COUNT; i++) {
     gotoxy(CONFIG_NIO_BBC_SLOTS_DRIVES_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_Y + i));
@@ -404,6 +466,9 @@ static void draw_slots(config_nio_state_t *state)
           "",
           (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH -
                      (slot_index_width(mapping.slot) - 1)));
+    } else if (runtime_mount_display(i)) {
+      cputs("BOOT ");
+      put_basename(uri_buf, BBC_RUNTIME_NAME_WIDTH);
     } else {
       cputs("--");
       put_fixed("", CONFIG_NIO_BBC_SLOTS_DRIVES_EMPTY_WIDTH);
