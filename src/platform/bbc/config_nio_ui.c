@@ -7,6 +7,8 @@
 
 #include "fn_bbc_internal.h"
 
+extern uint8_t label_width2 (const char *label);
+
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
 #define BBC_ROWS CONFIG_NIO_BBC_SCREEN_HEIGHT
 #define BBC_DRIVE_COUNT 4
