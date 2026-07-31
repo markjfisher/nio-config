@@ -20,9 +20,9 @@
 static uint8_t store_buf[CONFIG_NIO_STORE_BUF_SIZE];
 static uint8_t appstore_buf[CONFIG_NIO_APPSTORE_BUF_SIZE];
 static fn_appstore_io_t appstore_io = { appstore_buf, sizeof(appstore_buf) };
+static fn_slot_catalog_io_t slot_io = { appstore_buf, sizeof(appstore_buf) };
 static char line_buf[CONFIG_NIO_URI_MAX + 10];
 static char host_tmp[CONFIG_NIO_URI_MAX + 1];
-static char slot_key_buf[9];
 
 static void append_digit(char *buf, uint16_t *off, uint8_t value)
 {
@@ -369,42 +369,28 @@ int config_nio_save_mappings(const config_nio_state_t *state)
          wr.bytes_written == CONFIG_NIO_MAPPINGS_SIZE;
 }
 
-static const char *slot_key(uint8_t index)
-{
-  slot_key_buf[0] = 's';
-  slot_key_buf[1] = 'l';
-  slot_key_buf[2] = 'o';
-  slot_key_buf[3] = 't';
-  slot_key_buf[4] = '-';
-  slot_key_buf[5] = (char) ('0' + index / 100);
-  slot_key_buf[6] = (char) ('0' + (index / 10) % 10);
-  slot_key_buf[7] = (char) ('0' + index % 10);
-  slot_key_buf[8] = 0;
-  return slot_key_buf;
-}
-
 int config_nio_read_slot(uint8_t index, config_nio_slot_t *slot)
 {
-  fn_appstore_read_t rr;
+  fn_slot_catalog_entry_t entry;
   uint8_t result;
   uint16_t uri_len;
   if (!slot)
     return 0;
   memset(slot, 0, sizeof(*slot));
-  result = fn_appstore_read(&appstore_io, CONFIG_NIO_NS, slot_key(index), 0,
-                            appstore_buf, CONFIG_NIO_APPSTORE_READ_MAX, &rr);
+  result = fn_slot_catalog_get(&slot_io, index, &entry);
+  if (result == FN_ERR_NOT_FOUND)
+    return 1;
   if (result != FN_OK)
     return 0;
-  if ((rr.flags & FN_APPSTORE_READ_EXISTS) == 0)
-    return 1;
-  if (rr.bytes_read < 3 || appstore_buf[0] != 1)
+  if ((entry.flags & FN_SLOT_CATALOG_ENTRY_VALID) == 0)
     return 0;
-  uri_len = (uint16_t) (rr.bytes_read - 2);
+  uri_len = entry.uri_len;
   if (uri_len > CONFIG_NIO_URI_MAX)
     uri_len = CONFIG_NIO_URI_MAX;
   slot->enabled = 1;
-  strcpy(slot->mode, (appstore_buf[1] & 0x01) ? "r" : "rw");
-  memcpy(slot->uri, appstore_buf + 2, uri_len);
+  strcpy(slot->mode,
+         (entry.flags & FN_SLOT_CATALOG_ENTRY_READ_ONLY) ? "r" : "rw");
+  memcpy(slot->uri, entry.uri, uri_len);
   slot->uri[uri_len] = 0;
   return slot->uri[0] != 0;
 }
@@ -434,45 +420,28 @@ int config_nio_refresh_slots(config_nio_state_t *state)
 int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
                           const char *uri, const char *mode)
 {
-  fn_appstore_delete_t dr;
-  fn_appstore_write_t wr;
+  fn_slot_catalog_entry_t entry;
   uint16_t uri_len;
-  uint16_t len;
+  uint8_t flags;
   if (!state || !uri || !uri[0])
     return 0;
   uri_len = (uint16_t) strlen(uri);
-  if (uri_len > CONFIG_NIO_URI_MAX || (size_t) uri_len + 2 > sizeof(appstore_buf))
+  if (uri_len > CONFIG_NIO_URI_MAX ||
+      (size_t) uri_len + 5 > sizeof(appstore_buf))
     return 0;
-  /*
-   * appstore_buf is the AppStore client's protocol work buffer, so it cannot
-   * also be the write-data source: request-prefix assembly overwrites it
-   * before fn_appstore_write copies the record.  store_buf is already sized
-   * for this record and keeps the source disjoint without adding RAM.
-   */
-  store_buf[0] = 1;
-  store_buf[1] = (uint8_t) (mode && strcmp(mode, "r") == 0 ? 0x01 : 0x00);
-  memcpy(store_buf + 2, uri, uri_len);
-  len = (uint16_t) (uri_len + 2);
-  /*
-   * AppStore writes are offset writes and do not truncate an existing value.
-   * Remove the old record first so replacing a long URI with a shorter URI
-   * cannot retain a stale suffix.
-   */
-  if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
-    return 0;
-  if (fn_appstore_write(&appstore_io, CONFIG_NIO_NS, slot_key(index), 0,
-                        store_buf, len, &wr) != FN_OK ||
-      wr.bytes_written != len)
+  flags = (uint8_t) (mode && strcmp(mode, "r") == 0
+                     ? FN_SLOT_CATALOG_ENTRY_READ_ONLY : 0);
+  if (fn_slot_catalog_put(&slot_io, index, flags, uri, &entry) != FN_OK)
     return 0;
   return config_nio_refresh_slots(state);
 }
 
 int config_nio_delete_slot(config_nio_state_t *state, uint8_t index)
 {
-  fn_appstore_delete_t dr;
+  uint8_t deleted;
   if (!state)
     return 0;
-  if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
+  if (fn_slot_catalog_delete(&slot_io, index, &deleted) != FN_OK)
     return 0;
   return config_nio_refresh_slots(state);
 }

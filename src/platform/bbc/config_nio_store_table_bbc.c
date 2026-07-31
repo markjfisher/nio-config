@@ -4,18 +4,23 @@
 #include <string.h>
 
 #define CONFIG_NIO_APPSTORE_BUF_SIZE 64
-#define CONFIG_NIO_STORE_BUF_SIZE (CONFIG_NIO_URI_MAX + 4)
+#define CONFIG_NIO_STORE_BUF_SIZE (CONFIG_NIO_URI_MAX + 5)
 #define CONFIG_NIO_APPSTORE_READ_MAX (CONFIG_NIO_APPSTORE_BUF_SIZE - 10)
 
 uint16_t __fastcall__ config_nio_bbc_build_mappings(uint8_t *buf, uint16_t cap);
 uint16_t __fastcall__ config_nio_bbc_parse_hosts(config_nio_state_t *state);
 void __fastcall__ config_nio_bbc_parse_mappings(uint16_t len);
+uint8_t config_nio_bbc_put_slot(void);
+uint8_t config_nio_bbc_delete_slot(void);
 
 uint8_t config_nio_store_buf[CONFIG_NIO_STORE_BUF_SIZE];
 uint8_t config_nio_appstore_buf[CONFIG_NIO_APPSTORE_BUF_SIZE];
 uint16_t config_nio_bbc_parse_len;
 uint16_t config_nio_bbc_line_len;
 uint8_t config_nio_bbc_parse_finish;
+uint8_t config_nio_bbc_slot_index;
+uint8_t config_nio_bbc_slot_flags;
+const char *config_nio_bbc_slot_uri;
 #define store_buf config_nio_store_buf
 #define appstore_buf config_nio_appstore_buf
 #define line_buf ((char *) store_buf)
@@ -24,62 +29,26 @@ static fn_appstore_io_t appstore_io = {
   config_nio_appstore_buf,
   sizeof(config_nio_appstore_buf)
 };
-static char slot_key_buf[9];
-
-static const char *slot_key(uint8_t index)
-{
-  uint8_t hundreds = 0;
-  uint8_t tens = 0;
-  while (index >= 100) { index = (uint8_t) (index - 100); hundreds++; }
-  while (index >= 10) { index = (uint8_t) (index - 10); tens++; }
-  slot_key_buf[0] = 's'; slot_key_buf[1] = 'l'; slot_key_buf[2] = 'o';
-  slot_key_buf[3] = 't'; slot_key_buf[4] = '-';
-  slot_key_buf[5] = (char) ('0' + hundreds);
-  slot_key_buf[6] = (char) ('0' + tens);
-  slot_key_buf[7] = (char) ('0' + index); slot_key_buf[8] = 0;
-  return slot_key_buf;
-}
-
-
 int config_nio_write_slot(config_nio_state_t *state, uint8_t index,
                           const char *uri, const char *mode)
 {
-  fn_appstore_delete_t dr;
-  fn_appstore_write_t wr;
   uint16_t uri_len = (uint16_t) strlen(uri);
-  uint16_t off = 0;
-  uint16_t pos = 0;
   if (!uri_len || uri_len > CONFIG_NIO_URI_MAX) return 0;
-  if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
+  config_nio_bbc_slot_index = index;
+  config_nio_bbc_slot_flags =
+    (uint8_t) (mode && mode[0] == 'r' && mode[1] == 0
+               ? FN_SLOT_CATALOG_ENTRY_READ_ONLY : 0);
+  config_nio_bbc_slot_uri = uri;
+  if (!config_nio_bbc_put_slot())
     return 0;
-  /*
-   * The AppStore client assembles its request in appstore_buf before copying
-   * the supplied data.  Keep the record header in the separate store buffer;
-   * passing appstore_buf as both work buffer and source corrupts byte 1 with
-   * the namespace length before it is copied.
-   */
-  store_buf[0] = 1;
-  store_buf[1] = (uint8_t) (mode && strcmp(mode, "r") == 0);
-  if (fn_appstore_write(&appstore_io, CONFIG_NIO_NS, slot_key(index), 0,
-                        store_buf, 2, &wr) != FN_OK || wr.bytes_written != 2)
-    return 0;
-  off = 2;
-  while (pos < uri_len) {
-    uint16_t chunk = (uint16_t) (uri_len - pos);
-    if (chunk > CONFIG_NIO_APPSTORE_READ_MAX) chunk = CONFIG_NIO_APPSTORE_READ_MAX;
-    if (fn_appstore_write(&appstore_io, CONFIG_NIO_NS, slot_key(index), off,
-                          (const uint8_t *) uri + pos, chunk, &wr) != FN_OK ||
-        wr.bytes_written != chunk) return 0;
-    off = (uint16_t) (off + chunk); pos = (uint16_t) (pos + chunk);
-  }
   config_nio_bbc_invalidate_slot_cache();
   return config_nio_refresh_slots(state);
 }
 
 int config_nio_delete_slot(config_nio_state_t *state, uint8_t index)
 {
-  fn_appstore_delete_t dr;
-  if (fn_appstore_delete(&appstore_io, CONFIG_NIO_NS, slot_key(index), &dr) != FN_OK)
+  config_nio_bbc_slot_index = index;
+  if (!config_nio_bbc_delete_slot())
     return 0;
   config_nio_bbc_invalidate_slot_cache();
   return config_nio_refresh_slots(state);

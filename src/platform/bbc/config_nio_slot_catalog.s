@@ -1,19 +1,26 @@
         .export _config_nio_read_slot
         .export _config_nio_read_slot_page
         .export _config_nio_read_slot_page_previous
+        .export _config_nio_bbc_put_slot
+        .export _config_nio_bbc_delete_slot
 
         .import _config_nio_appstore_buf
         .import _config_nio_store_buf
+        .import _config_nio_bbc_slot_index
+        .import _config_nio_bbc_slot_flags
+        .import _config_nio_bbc_slot_uri
         .import _config_nio_bbc_slot_set
-        .import _fn_appstore_call
+        .import _fn_slot_catalog_call
         .import popa, pusha, pushax
         .importzp ptr1, ptr2, tmp1, tmp2, tmp3, tmp4
 
-FILE_CMD_SLOT_CATALOG_RANGE = $25
+SLOT_CATALOG_CMD_RANGE      = $04
+SLOT_CATALOG_CMD_PUT        = $02
+SLOT_CATALOG_CMD_DELETE     = $03
 SLOT_TAIL_URI               = $01
 SLOT_MORE                   = $01
 SLOT_ENTRY_VALID            = $01
-STORE_SIZE                  = 132
+STORE_SIZE                  = 133
 MAX_PAYLOAD                 = STORE_SIZE - 7
 SLOT_SIZE                   = 30
 SLOT_URI_MAX                = 28
@@ -37,6 +44,8 @@ dest_ptr:       .res 2
 end_ptr:        .res 2
 next_ptr:       .res 2
 table_base:     .res 1
+mutation_command: .res 1
+mutation_request_len: .res 1
 
         .code
 
@@ -49,6 +58,87 @@ return1:
         lda     #1
         ldx     #0
         rts
+
+; Complete a Slot Catalog call and accept only a successful response whose
+; first byte is the protocol version. Command is in A, request length in X.
+catalog_mutation_call:
+        sta     mutation_command
+        stx     mutation_request_len
+        lda     #<catalog_io
+        ldx     #>catalog_io
+        jsr     pushax
+        lda     mutation_command
+        jsr     pusha
+        lda     mutation_request_len
+        ldx     #0
+        jsr     pushax
+        lda     #<response_len
+        ldx     #>response_len
+        jsr     _fn_slot_catalog_call
+        bne     @bad
+        lda     response_len+1
+        bne     @bad
+        lda     response_len
+        beq     @bad
+        lda     _config_nio_store_buf
+        cmp     #1
+        bne     @bad
+        jmp     return1
+@bad:   jmp     return0
+
+; Assemble Put without pulling the generic C string/copy implementation into
+; the memory-constrained BBC transient application.
+_config_nio_bbc_put_slot:
+        lda     _config_nio_bbc_slot_uri
+        sta     ptr1
+        lda     _config_nio_bbc_slot_uri+1
+        sta     ptr1+1
+        ldy     #0
+@length:
+        lda     (ptr1),y
+        beq     @have_length
+        iny
+        cpy     #129
+        bcc     @length
+        jmp     return0
+@have_length:
+        tya
+        beq     @invalid
+        sta     tmp3
+        lda     #1
+        sta     _config_nio_store_buf
+        lda     _config_nio_bbc_slot_index
+        sta     _config_nio_store_buf+1
+        lda     _config_nio_bbc_slot_flags
+        sta     _config_nio_store_buf+2
+        lda     tmp3
+        sta     _config_nio_store_buf+3
+        lda     #0
+        sta     _config_nio_store_buf+4
+        ldy     #0
+@copy:
+        lda     (ptr1),y
+        sta     _config_nio_store_buf+5,y
+        iny
+        cpy     tmp3
+        bne     @copy
+        tya
+        clc
+        adc     #5
+        tax
+        lda     #SLOT_CATALOG_CMD_PUT
+        jmp     catalog_mutation_call
+@invalid:
+        jmp     return0
+
+_config_nio_bbc_delete_slot:
+        lda     #1
+        sta     _config_nio_store_buf
+        lda     _config_nio_bbc_slot_index
+        sta     _config_nio_store_buf+1
+        ldx     #2
+        lda     #SLOT_CATALOG_CMD_DELETE
+        jmp     catalog_mutation_call
 
 clear_slot_temp:
         lda     #0
@@ -84,14 +174,14 @@ catalog_call:
         lda     #<catalog_io
         ldx     #>catalog_io
         jsr     pushax
-        lda     #FILE_CMD_SLOT_CATALOG_RANGE
+        lda     #SLOT_CATALOG_CMD_RANGE
         jsr     pusha
         lda     #8
         ldx     #0
         jsr     pushax
         lda     #<response_len
         ldx     #>response_len
-        jsr     _fn_appstore_call
+        jsr     _fn_slot_catalog_call
         bne     @bad
         lda     response_len+1
         bne     @bad

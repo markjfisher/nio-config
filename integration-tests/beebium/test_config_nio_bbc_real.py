@@ -91,17 +91,17 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
     rows = read_mode7_screen(bbc)
     assert "11" in rows[15]
     assert "blank.ssd" in rows[15]
-    catalogue_calls = real_fujinet_config_nio.log_text().count("dev=0xFE cmd=0x25")
+    catalogue_calls = real_fujinet_config_nio.log_text().count("dev=0xF2 cmd=0x04")
     press_key(bbc, "P", wait=0.4)  # slots 0-7
     wait_for_screen_without_text(bbc, "blank.ssd")
-    assert real_fujinet_config_nio.log_text().count("dev=0xFE cmd=0x25") == catalogue_calls
+    assert real_fujinet_config_nio.log_text().count("dev=0xF2 cmd=0x04") == catalogue_calls
     rows = read_mode7_screen(bbc)
     assert "3" in rows[15]
     assert rows[15][35] == " ", rows[15]
     press_key(bbc, "N", wait=0.4)  # slots 8-15
-    assert real_fujinet_config_nio.log_text().count("dev=0xFE cmd=0x25") == catalogue_calls
+    assert real_fujinet_config_nio.log_text().count("dev=0xF2 cmd=0x04") == catalogue_calls
     press_key(bbc, "N", wait=0.4)  # slots 16-23
-    assert real_fujinet_config_nio.log_text().count("dev=0xFE cmd=0x25") > catalogue_calls
+    assert real_fujinet_config_nio.log_text().count("dev=0xF2 cmd=0x04") > catalogue_calls
     rows = read_mode7_screen(bbc)
     assert "16" in rows[12]
     assert "23" in rows[19]
