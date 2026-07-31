@@ -73,7 +73,6 @@ static char *runtime_mount_display(uint8_t unit)
   uint8_t len;
 
   display = &uri_buf[runtime_offsets[unit]];
-  display[0] = 0;
   request[0] = 1;
   request[1] = 1;
   request[2] = unit;
@@ -919,6 +918,9 @@ void config_nio_run(config_nio_state_t *state)
     int key;
     uint8_t redraw;
 
+    /* Editing deliberately enables the cursor.  Restore the application-wide
+     * hidden state before waiting for the next command or key. */
+    bbc_cursor(0);
     key = cgetc();
     redraw = 0;
     if (key_is_quit(key)) {

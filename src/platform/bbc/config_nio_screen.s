@@ -5,6 +5,7 @@
         .export _config_nio_bbc_put_basename
 
         .import popax
+        .import _cursor
         .importzp ptr1, ptr2, tmp1, tmp2
 
         .include "oslib/os.inc"
@@ -14,6 +15,7 @@
 ; void __fastcall__ config_nio_bbc_cursor(uint8_t on)
 _config_nio_bbc_cursor:
         pha
+        sta     _cursor
         lda     #23
         jsr     OSWRCH
         lda     #1
