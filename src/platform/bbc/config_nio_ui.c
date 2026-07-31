@@ -52,6 +52,7 @@ enum {
 extern uint8_t config_nio_store_buf[];
 #define edit_buf ((char *) config_nio_store_buf)
 char uri_buf[BBC_URI_WORK_MAX];
+static const uint8_t runtime_offsets[] = { 0, 20, 40, 60 };
 
 /* Runtime mounts are deliberately transient: config-nio's persistent mapping
  * table contains catalogue-slot assignments, while boot/FBOOT mounts are
@@ -59,6 +60,7 @@ char uri_buf[BBC_URI_WORK_MAX];
 extern uint8_t fnsvc_bbc_resp_buf[];
 static char *runtime_mount_display(uint8_t unit)
 {
+  char *display;
   uint8_t request[10];
   uint8_t device_status;
   uint8_t result;
@@ -70,6 +72,8 @@ static char *runtime_mount_display(uint8_t unit)
   const uint8_t *p;
   uint8_t len;
 
+  display = &uri_buf[runtime_offsets[unit]];
+  display[0] = 0;
   request[0] = 1;
   request[1] = 1;
   request[2] = unit;
@@ -103,9 +107,17 @@ static char *runtime_mount_display(uint8_t unit)
     if (*p == '/' || *p == ':') name = p + 1;
   len = (uint8_t) (end - name);
   if (len > BBC_RUNTIME_NAME_WIDTH) len = BBC_RUNTIME_NAME_WIDTH;
-  memcpy(uri_buf, name, len);
-  uri_buf[len] = 0;
-  return uri_buf;
+  memcpy(display, name, len);
+  display[len] = 0;
+  return display;
+}
+
+static void refresh_runtime_mounts(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < BBC_DRIVE_COUNT; i++)
+    (void) runtime_mount_display(i);
 }
 
 static void put_slot_index(uint8_t value)
@@ -443,10 +455,12 @@ static void set_browse_marker(uint8_t row, uint8_t selected)
 static void draw_slots(config_nio_state_t *state)
 {
   uint8_t i;
+  char *runtime_name;
   config_nio_mapping_t mapping;
   config_nio_slot_t slot;
 
   load_screen_template("CNSLOTS");
+  runtime_name = uri_buf;
   for (i = 0; i < FNCTL_MAX_UNITS; i++) {
     gotoxy(CONFIG_NIO_BBC_SLOTS_SLOTS_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_SLOTS_Y + i));
     cputc((slots_focus && i == selected_slot) ? '>' : ' ');
@@ -480,13 +494,14 @@ static void draw_slots(config_nio_state_t *state)
           "",
           (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_BASENAME_WIDTH -
                      (slot_index_width(mapping.slot) - 1)));
-    } else if (runtime_mount_display(i)) {
+    } else if (*runtime_name) {
       cputs("BOOT ");
-      put_basename(uri_buf, BBC_RUNTIME_NAME_WIDTH);
+      put_basename(runtime_name, BBC_RUNTIME_NAME_WIDTH);
     } else {
       cputs("--");
       put_fixed("", CONFIG_NIO_BBC_SLOTS_DRIVES_EMPTY_WIDTH);
     }
+    runtime_name += 20;
   }
 }
 
@@ -913,6 +928,12 @@ void config_nio_run(config_nio_state_t *state)
       redraw = 1;
     } else if (key == 's' || key == 'S') {
       current_screen = SCREEN_SLOTS;
+      /* Runtime mount responses share the slot cache response buffer.  Read
+       * them once before refilling the active page; redraws must not query
+       * DiskService or cached pages are destroyed. */
+      config_nio_bbc_invalidate_slot_cache();
+      refresh_runtime_mounts();
+      (void) config_nio_refresh_slots(state);
       redraw = 1;
     } else if (key == 'm' || key == 'M') {
       (void) config_nio_mount_mappings(state);

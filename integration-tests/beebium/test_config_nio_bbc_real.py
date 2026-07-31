@@ -7,6 +7,8 @@ from beebium.client.screen import dump_screen, read_mode7_screen
 from helpers import command, wait_for_screen_text
 
 ARROW_DOWN = (2, 9)
+ARROW_LEFT = (1, 9)
+ARROW_RIGHT = (7, 9)
 
 
 def type_text(bbc, text: str) -> None:
@@ -194,6 +196,44 @@ def test_config_nio_bbc_shows_fboot_runtime_mount(
     assert len(mappings) == 0 or mappings[0] == 1
     if mappings:
         assert mappings[7:9] == b"\x00\x00"  # drive 3 remains catalogue-unassigned
+
+
+def test_config_nio_bbc_slots_cached_previous_page_renders_all_rows(
+    beebium_config_nio, screen_evidence
+):
+    bbc = beebium_config_nio
+
+    command(bbc, "*FUJI")
+    command(bbc, "*FHOST host:/cfg/images")
+    command(bbc, "*FIN 0 blank.ssd")
+    command(bbc, "*FIN 3 ctests.ssd")
+    command(bbc, "*FIN 10 chuck.ssd")
+    command(bbc, "*FIN 20 bwc.ssd")
+
+    type_text(bbc, "*CONFNIO\r")
+    wait_for_screen_text(bbc, "sd0:/")
+    press_key(bbc, "S", wait=0.5)
+    wait_for_screen_text(bbc, "Drive Mappings", evidence=screen_evidence,
+                         label="slots cache page 0")
+    press_key(bbc, "\t")
+
+    tap_matrix(bbc, *ARROW_RIGHT)
+    time.sleep(0.5)
+    tap_matrix(bbc, *ARROW_RIGHT)
+    time.sleep(0.5)
+    rows = read_mode7_screen(bbc)
+    for slot in range(16, 24):
+        assert str(slot) in rows[12 + slot - 16], rows[12 + slot - 16]
+
+    # Page 8-15 should now be served from the two-page cache rather than
+    # refetched. Every row must retain its index after the redraw.
+    tap_matrix(bbc, *ARROW_LEFT)
+    time.sleep(0.5)
+    rows = read_mode7_screen(bbc)
+    if screen_evidence is not None:
+        screen_evidence.capture(bbc, "slots cached previous page")
+    for slot in range(8, 16):
+        assert str(slot) in rows[12 + slot - 8], rows[12 + slot - 8]
 
 
 def test_config_nio_bbc_shows_cli_mapping_and_canonical_slot_uri(
