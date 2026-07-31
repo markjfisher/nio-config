@@ -74,7 +74,8 @@ CONFIG_NIO_BBC_TEMPLATE_INPUTS := \
 	bbc/scripts/generate_config_nio_templates.py
 CONFIG_NIO_BBC_GENERATED := \
 	$(SRC_DIR)/platform/$(PLATFORM)/config_nio_template_data.s \
-	$(SRC_DIR)/platform/$(PLATFORM)/config_nio_layout.h
+	$(SRC_DIR)/platform/$(PLATFORM)/config_nio_layout.h \
+	$(SRC_DIR)/platform/$(PLATFORM)/config_nio_layout.inc
 
 $(CONFIG_NIO_BBC_GENERATED): $(CONFIG_NIO_BBC_TEMPLATE_INPUTS)
 	python3 bbc/scripts/generate_config_nio_templates.py

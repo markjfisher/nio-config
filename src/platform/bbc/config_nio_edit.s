@@ -309,8 +309,8 @@ draw_field:
         cmp     _config_nio_bbc_edit_width
         bcc     @cursor_col_ok
         lda     _config_nio_bbc_edit_width
-        sec
-        sbc     #1
+        ; sec
+        sbc     #2      ; we know carry is clear, so save an instruction and subtract 2 instead of 1.
 @cursor_col_ok:
         clc
         adc     _config_nio_bbc_edit_x

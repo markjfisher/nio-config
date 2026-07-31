@@ -7,7 +7,7 @@
 
 #include "fn_bbc_internal.h"
 
-extern uint8_t label_width2 (const char *label);
+extern uint8_t label_width (const char *label);
 
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
 #define BBC_ROWS CONFIG_NIO_BBC_SCREEN_HEIGHT
@@ -127,20 +127,21 @@ static uint8_t slot_index_width(uint8_t value)
     return 2;
   return 1;
 }
-static uint8_t current_screen;
-static uint8_t selected_host;
-static uint8_t selected_entry;
-static uint8_t selected_drive;
-static uint8_t selected_slot;
-static uint8_t assign_slot_start;
-static uint8_t slots_focus;
-static uint8_t browse_host;
-static uint8_t hosts_start;
-static uint16_t browse_start;
-static uint16_t browse_next;
-static uint16_t browse_page_stack[BBC_BROWSE_PAGE_STACK];
-static uint8_t browse_page_depth;
-static uint8_t browse_more;
+
+uint8_t current_screen;
+uint8_t selected_host;
+uint8_t selected_entry;
+uint8_t selected_drive;
+uint8_t selected_slot;
+uint8_t assign_slot_start;
+uint8_t slots_focus;
+uint8_t browse_host;
+uint8_t hosts_start;
+uint16_t browse_start;
+uint16_t browse_next;
+uint16_t browse_page_stack[BBC_BROWSE_PAGE_STACK];
+uint8_t browse_page_depth;
+uint8_t browse_more;
 
 void __fastcall__ config_nio_bbc_cursor(uint8_t on);
 void __fastcall__ config_nio_bbc_clear_line(uint8_t row);
@@ -187,22 +188,22 @@ static void pause_line(const char *s)
   (void) cgetc();
 }
 
-static uint8_t label_width(const char *label)
-{
-  uint8_t len;
+// static uint8_t label_width(const char *label)
+// {
+//   uint8_t len;
 
-  len = 0;
-  while (label && label[len] && len < 12)
-    len++;
-  return len;
-}
+//   len = 0;
+//   while (label && label[len] && len < 12)
+//     len++;
+//   return len;
+// }
 
 static void load_screen_template(const char *asset_name)
 {
   config_nio_bbc_load_template(asset_name);
 }
 
-static int prompt_line(const char *label, char *buf, uint16_t cap)
+static int prompt_line(const char *label, char *buf, uint8_t cap)
 {
   uint8_t label_len;
   uint8_t width;
@@ -230,7 +231,7 @@ static int prompt_line(const char *label, char *buf, uint16_t cap)
     clear_width = width;
   }
   if (cap <= width)
-    width = (uint8_t) (cap - 1);
+    width = (cap - 1);
   if (width == 0)
     return 0;
 
@@ -244,7 +245,7 @@ static int prompt_line(const char *label, char *buf, uint16_t cap)
   clear_field(x, y, width);
 
   config_nio_bbc_edit_buf = buf;
-  config_nio_bbc_edit_cap = (uint8_t) cap;
+  config_nio_bbc_edit_cap = cap;
   config_nio_bbc_edit_x = x;
   config_nio_bbc_edit_y = y;
   config_nio_bbc_edit_width = width;
@@ -446,6 +447,17 @@ static void draw_slots(config_nio_state_t *state)
   config_nio_slot_t slot;
 
   load_screen_template("CNSLOTS");
+  for (i = 0; i < FNCTL_MAX_UNITS; i++) {
+    gotoxy(CONFIG_NIO_BBC_SLOTS_SLOTS_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_SLOTS_Y + i));
+    cputc((slots_focus && i == selected_slot) ? '>' : ' ');
+    cputc(' ');
+    put_slot_index((uint8_t) (state->slot_start + i));
+    cputc(' ');
+    if (config_nio_slot_get(state, i, &slot))
+      put_tail(slot.uri, CONFIG_NIO_BBC_SLOTS_SLOTS_URI_WIDTH);
+    else
+      put_fixed("", CONFIG_NIO_BBC_SLOTS_SLOTS_URI_WIDTH);
+  }
   for (i = 0; i < BBC_DRIVE_COUNT; i++) {
     gotoxy(CONFIG_NIO_BBC_SLOTS_DRIVES_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_Y + i));
     cputc((!slots_focus && i == selected_drive) ? '>' : ' ');
@@ -475,17 +487,6 @@ static void draw_slots(config_nio_state_t *state)
       cputs("--");
       put_fixed("", CONFIG_NIO_BBC_SLOTS_DRIVES_EMPTY_WIDTH);
     }
-  }
-  for (i = 0; i < FNCTL_MAX_UNITS; i++) {
-    gotoxy(CONFIG_NIO_BBC_SLOTS_SLOTS_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_SLOTS_Y + i));
-    cputc((slots_focus && i == selected_slot) ? '>' : ' ');
-    cputc(' ');
-    put_slot_index((uint8_t) (state->slot_start + i));
-    cputc(' ');
-    if (config_nio_slot_get(state, i, &slot))
-      put_tail(slot.uri, CONFIG_NIO_BBC_SLOTS_SLOTS_URI_WIDTH);
-    else
-      put_fixed("", CONFIG_NIO_BBC_SLOTS_SLOTS_URI_WIDTH);
   }
 }
 
