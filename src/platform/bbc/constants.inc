@@ -18,6 +18,7 @@ NIO_DEVICE_DISK                 := $FC
 BBC_HOST_PAGE_ROWS              := 8
 CONFIG_NIO_MAX_HOSTS            := 15
 LAST_HOST_PAGE_START            := 8
+BBC_URI_WORK_MAX                := 129
 
 SCREEN_HOSTS            := 0
 SCREEN_BROWSE           := 1

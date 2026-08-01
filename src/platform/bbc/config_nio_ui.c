@@ -14,6 +14,7 @@ extern uint8_t key_is_previous_page(char key);
 extern void put_slot_index(uint8_t value);
 extern void config_nio_run(config_nio_state_t *state);
 extern char *runtime_mount_display(uint8_t unit);
+extern int fetch_browse_page(config_nio_state_t *state);
 
 
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
@@ -288,49 +289,49 @@ static int enter_dir(config_nio_state_t *state, const char *name)
   return 1;
 }
 
-int fetch_browse_page(config_nio_state_t *state)
-{
-  uint8_t ok;
-  uint16_t fetch_start;
-  uint16_t next_start;
-  uint8_t more;
-  uint8_t remaining;
+// int fetch_browse_page(config_nio_state_t *state)
+// {
+//   uint8_t ok;
+//   uint16_t fetch_start;
+//   uint16_t next_start;
+//   uint8_t more;
+//   uint8_t remaining;
 
-  state->entry_count = 0;
-  state->entries_truncated = 0;
-  if (!config_nio_host_get(state, browse_host, edit_buf, BBC_EDIT_BUF_SIZE) ||
-      !config_nio_compose_uri(edit_buf, state->browse_path,
-                              "", uri_buf, sizeof(uri_buf))) {
-    config_nio_set_status(state, "Path long");
-    return 0;
-  }
+//   state->entry_count = 0;
+//   state->entries_truncated = 0;
+//   if (!config_nio_host_get(state, browse_host, edit_buf, BBC_EDIT_BUF_SIZE) ||
+//       !config_nio_compose_uri(edit_buf, state->browse_path,
+//                               "", uri_buf, sizeof(uri_buf))) {
+//     config_nio_set_status(state, "Path long");
+//     return 0;
+//   }
 
-  fetch_start = browse_start;
-  browse_more = 0;
-  browse_next = browse_start;
-  do {
-    remaining = (uint8_t) (BBC_BROWSE_PAGE_ROWS - state->entry_count);
-  config_nio_bbc_invalidate_slot_cache();
-  ok = (uint8_t) fnsvc_config_nio_list_directory_page(state, uri_buf,
-                                                        fetch_start,
-                                                        remaining,
-                                                        &next_start,
-                                                        &more);
-    if (!ok) {
-      config_nio_set_status(state, "Host error");
-      return 0;
-    }
-    browse_next = next_start;
-    browse_more = more;
-    if (!more || next_start == fetch_start)
-      break;
-    fetch_start = next_start;
-  } while (state->entry_count < BBC_BROWSE_PAGE_ROWS);
+//   fetch_start = browse_start;
+//   browse_more = 0;
+//   browse_next = browse_start;
+//   do {
+//     remaining = (uint8_t) (BBC_BROWSE_PAGE_ROWS - state->entry_count);
+//   config_nio_bbc_invalidate_slot_cache();
+//   ok = (uint8_t) fnsvc_config_nio_list_directory_page(state, uri_buf,
+//                                                         fetch_start,
+//                                                         remaining,
+//                                                         &next_start,
+//                                                         &more);
+//     if (!ok) {
+//       config_nio_set_status(state, "Host error");
+//       return 0;
+//     }
+//     browse_next = next_start;
+//     browse_more = more;
+//     if (!more || next_start == fetch_start)
+//       break;
+//     fetch_start = next_start;
+//   } while (state->entry_count < BBC_BROWSE_PAGE_ROWS);
 
-  selected_entry = 0;
-  config_nio_set_status(state, browse_more ? "More" : "End");
-  return 1;
-}
+//   selected_entry = 0;
+//   config_nio_set_status(state, browse_more ? "More" : "End");
+//   return 1;
+// }
 
 static void reset_browse_pages(void)
 {
