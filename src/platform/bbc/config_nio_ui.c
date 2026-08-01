@@ -10,6 +10,7 @@
 extern int prompt_host(void);
 extern uint8_t key_is_next_page(char key);
 extern uint8_t key_is_previous_page(char key);
+extern void put_slot_index(uint8_t value);
 
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
 #define BBC_ROWS CONFIG_NIO_BBC_SCREEN_HEIGHT
@@ -121,16 +122,16 @@ static void refresh_runtime_mounts(void)
     (void) runtime_mount_display(i);
 }
 
-static void put_slot_index(uint8_t value)
-{
-  uint8_t hundreds = 0;
-  uint8_t tens = 0;
-  while (value >= 100) { value = (uint8_t) (value - 100); hundreds++; }
-  while (value >= 10) { value = (uint8_t) (value - 10); tens++; }
-  if (hundreds) cputc((char) ('0' + hundreds));
-  if (hundreds || tens) cputc((char) ('0' + tens));
-  cputc((char) ('0' + value));
-}
+// static void put_slot_index(uint8_t value)
+// {
+//   uint8_t hundreds = 0;
+//   uint8_t tens = 0;
+//   while (value >= 100) { value = (uint8_t) (value - 100); hundreds++; }
+//   while (value >= 10) { value = (uint8_t) (value - 10); tens++; }
+//   if (hundreds) cputc((char) ('0' + hundreds));
+//   if (hundreds || tens) cputc((char) ('0' + tens));
+//   cputc((char) ('0' + value));
+// }
 
 static uint8_t slot_index_width(uint8_t value)
 {
