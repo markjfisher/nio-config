@@ -259,7 +259,9 @@ def test_config_nio_bbc_slots_cached_previous_page_renders_all_rows(
     command(bbc, "*FHOST host:/cfg/images")
     command(bbc, "*FIN 0 blank.ssd")
     command(bbc, "*FIN 3 ctests.ssd")
-    command(bbc, "*FIN 10 chuck.ssd")
+    # This long URI fills the slot row when rendered with its two-digit
+    # index.  Paging back to the one-digit page must clear the entire row.
+    command(bbc, "*FIN 10 longer-navtest.ssd")
     command(bbc, "*FIN 20 bwc.ssd")
 
     type_text(bbc, "*CONFNIO\r")
@@ -269,6 +271,20 @@ def test_config_nio_bbc_slots_cached_previous_page_renders_all_rows(
                          label="slots cache page 0")
     press_key(bbc, "\t")
 
+    # Fetch page 8-15, then return to the cached page 0-7.  Slot 10's URI
+    # occupies the full row on the first page, so slot 2 exposes stale text.
+    tap_matrix(bbc, *ARROW_RIGHT)
+    time.sleep(0.5)
+    rows = read_mode7_screen(bbc)
+    assert "10" in rows[14]
+    assert "longer-navtest.ssd" in rows[14]
+    tap_matrix(bbc, *ARROW_LEFT)
+    time.sleep(0.5)
+    rows = read_mode7_screen(bbc)
+    assert rows[14][8:37].strip() == "", rows[14]
+
+    # Continue paging forward and back to exercise the two-page cache with
+    # a non-adjacent sparse page as well.
     tap_matrix(bbc, *ARROW_RIGHT)
     time.sleep(0.5)
     tap_matrix(bbc, *ARROW_RIGHT)
@@ -286,6 +302,7 @@ def test_config_nio_bbc_slots_cached_previous_page_renders_all_rows(
         screen_evidence.capture(bbc, "slots cached previous page")
     for slot in range(8, 16):
         assert str(slot) in rows[12 + slot - 8], rows[12 + slot - 8]
+
 
 
 def test_config_nio_bbc_assigning_slot_to_drive_one_keeps_mappings_intact(

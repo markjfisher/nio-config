@@ -466,6 +466,12 @@ void draw_slot_rows(config_nio_state_t *state)
 
   for (i = 0; i < FNCTL_MAX_UNITS; i++) {
     gotoxy(CONFIG_NIO_BBC_SLOTS_SLOTS_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_SLOTS_Y + i));
+    /* Clear the complete usable row before drawing.  The index is
+       variable-width, so a one-digit empty entry can otherwise leave the
+       final character of a longer two-digit URI behind after paging. */
+    clear_field(CONFIG_NIO_BBC_SLOTS_SLOTS_X,
+                (uint8_t) (CONFIG_NIO_BBC_SLOTS_SLOTS_Y + i),
+                CONFIG_NIO_BBC_BROWSE_ASSIGN_CLEAR_WIDTH);
     cputc((slots_focus && i == selected_slot) ? '>' : ' ');
     cputc(' ');
     put_slot_index((uint8_t) (state->slot_start + i));
@@ -626,7 +632,7 @@ static int prompt_assign_slot(config_nio_state_t *state, uint8_t *slot_out)
   }
 }
 
-static void edit_host(config_nio_state_t *state)
+void edit_host(config_nio_state_t *state)
 {
   if (selected_host >= CONFIG_NIO_MAX_HOSTS) {
     config_nio_set_status(state, "Host full");
@@ -649,7 +655,7 @@ static void edit_host(config_nio_state_t *state)
   config_nio_set_status(state, "Saved");
 }
 
-static void clear_host(config_nio_state_t *state)
+void clear_host(config_nio_state_t *state)
 {
   uint8_t i;
 
@@ -701,60 +707,60 @@ void assign_selected_file(config_nio_state_t *state)
   config_nio_set_status(state, "Assigned");
 }
 
-uint8_t handle_hosts(config_nio_state_t *state, int key)
-{
-  uint8_t old;
+// uint8_t handle_hosts(config_nio_state_t *state, int key)
+// {
+//   uint8_t old;
 
-  old = selected_host;
-  if (key_is_up(key) && selected_host > 0) {
-    selected_host--;
-    if (selected_host < hosts_start)
-      return 1;
-    else {
-      set_host_marker(old, 0);
-      set_host_marker(selected_host, 1);
-    }
-    return 0;
-  } else if (key_is_down(key) && selected_host + 1 < CONFIG_NIO_MAX_HOSTS) {
-    selected_host++;
-    if (selected_host >= (uint8_t) (hosts_start + BBC_HOST_PAGE_ROWS))
-      return 1;
-    else {
-      set_host_marker(old, 0);
-      set_host_marker(selected_host, 1);
-    }
-    return 0;
-  } else if (key_is_left(key) && hosts_start > 0) {
-    hosts_start = 0;
-    if (selected_host >= BBC_HOST_PAGE_ROWS)
-      selected_host = 0;
-    return 1;
-  } else if (key_is_right(key) && hosts_start < last_host_page_start()) {
-    hosts_start = last_host_page_start();
-    if (selected_host < BBC_HOST_PAGE_ROWS)
-      selected_host = hosts_start;
-    return 1;
-  } else if (key == 'e' || key == 'E') {
-    edit_host(state);
-    return 1;
-  } else if (key == 'd' || key == 'D' || key == 'c' || key == 'C') {
-    clear_host(state);
-    return 1;
-  } else if (key == '\r' || key == '\n') {
-    if (selected_host < state->host_count) {
-      browse_host = selected_host;
-      state->browse_path[0] = 0;
-      browse_start = 0;
-      reset_browse_pages();
-      if (fetch_browse_page(state))
-        current_screen = SCREEN_BROWSE;
-      else
-        pause_line("Host error");
-      return 1;
-    }
-  }
-  return 0;
-}
+//   old = selected_host;
+//   if (key_is_up(key) && selected_host > 0) {
+//     selected_host--;
+//     if (selected_host < hosts_start)
+//       return 1;
+//     else {
+//       set_host_marker(old, 0);
+//       set_host_marker(selected_host, 1);
+//     }
+//     return 0;
+//   } else if (key_is_down(key) && selected_host + 1 < CONFIG_NIO_MAX_HOSTS) {
+//     selected_host++;
+//     if (selected_host >= (uint8_t) (hosts_start + BBC_HOST_PAGE_ROWS))
+//       return 1;
+//     else {
+//       set_host_marker(old, 0);
+//       set_host_marker(selected_host, 1);
+//     }
+//     return 0;
+//   } else if (key_is_left(key) && hosts_start > 0) {
+//     hosts_start = 0;
+//     if (selected_host >= BBC_HOST_PAGE_ROWS)
+//       selected_host = 0;
+//     return 1;
+//   } else if (key_is_right(key) && hosts_start < last_host_page_start()) {
+//     hosts_start = last_host_page_start();
+//     if (selected_host < BBC_HOST_PAGE_ROWS)
+//       selected_host = hosts_start;
+//     return 1;
+//   } else if (key == 'e' || key == 'E') {
+//     edit_host(state);
+//     return 1;
+//   } else if (key == 'd' || key == 'D' || key == 'c' || key == 'C') {
+//     clear_host(state);
+//     return 1;
+//   } else if (key == '\r' || key == '\n') {
+//     if (selected_host < state->host_count) {
+//       browse_host = selected_host;
+//       state->browse_path[0] = 0;
+//       browse_start = 0;
+//       reset_browse_pages();
+//       if (fetch_browse_page(state))
+//         current_screen = SCREEN_BROWSE;
+//       else
+//         pause_line("Host error");
+//       return 1;
+//     }
+//   }
+//   return 0;
+// }
 
 // uint8_t handle_browse(config_nio_state_t *state, int key)
 // {
