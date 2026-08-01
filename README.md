@@ -6,6 +6,9 @@ This repository owns `config-nio` and its generated BBC teletext template
 assets. It also carries the BBC `keycode` support tool while the BBC config
 disk/stage flow needs it.
 
+See [RUNNING_TESTS.md](RUNNING_TESTS.md) for copy-and-run build and Beebium
+integration-test commands.
+
 Supported default targets are `msdos`, `bbc`, and `linux`.
 
 ```sh

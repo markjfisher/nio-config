@@ -198,6 +198,54 @@ def test_config_nio_bbc_shows_fboot_runtime_mount(
         assert mappings[7:9] == b"\x00\x00"  # drive 3 remains catalogue-unassigned
 
 
+def test_config_nio_bbc_does_not_reuse_stale_uri_for_unmounted_drive(
+    beebium_config_nio, screen_evidence
+):
+    """A failed LIST_MOUNTS lookup must clear that drive's display buffer."""
+    bbc = beebium_config_nio
+
+    command(bbc, "*FUJI")
+    type_text(bbc, "*CONFNIO\r")
+    wait_for_screen_text(bbc, "sd0:/", label="hosts initial")
+    wait_for_screen_text(bbc, "fujinet.diller.org")
+
+    # Use the same known image twice.  The second assignment leaves its URI
+    # in the shared uri_buf, where it used to be mistaken for a runtime mount
+    # on D1 when LIST_MOUNTS returned no D1 entry.
+    press_key(bbc, "E")
+    type_text(bbc, "\x7f\x7f\x7f\x7f\x7fhost:/\r")
+    wait_for_screen_text(bbc, "host:/", label="hosts edited")
+    press_key(bbc, "\r", wait=0.5)
+    wait_for_screen_text(bbc, "cfg", label="browse root")
+    select_browse_entry(bbc, "cfg")
+    press_key(bbc, "\r", wait=0.5)
+    wait_for_screen_text(bbc, "images", label="browse cfg")
+    select_browse_entry(bbc, "images")
+    press_key(bbc, "\r", wait=0.5)
+    wait_for_screen_text(bbc, "longer-navtest.ssd", label="browse image")
+    select_browse_entry(bbc, "longer-navtest.ssd")
+
+    press_key(bbc, "A")
+    wait_for_screen_text(bbc, "Assign file to slot")
+    press_key(bbc, "5", wait=0.5)
+    wait_for_screen_text(bbc, "longer-navtest.ssd", label="slot 5 assigned")
+
+    # The browse selection remains on the same file after returning from the
+    # assignment dialog, so assign it again to a higher slot.
+    press_key(bbc, "A")
+    wait_for_screen_text(bbc, "Assign file to slot")
+    press_key(bbc, "N", wait=0.4)  # slots 8-15
+    press_key(bbc, "4", wait=0.5)  # absolute slot 12
+    wait_for_screen_text(bbc, "longer-navtest.ssd", label="slot 12 assigned")
+
+    press_key(bbc, "S", wait=0.5)
+    screen = wait_for_screen_text(
+        bbc, "Drive Mappings", evidence=screen_evidence, label="slots page"
+    )
+    assert "D0 BOOT" in screen
+    assert "D1 BOOT" not in screen
+
+
 def test_config_nio_bbc_slots_cached_previous_page_renders_all_rows(
     beebium_config_nio, screen_evidence
 ):

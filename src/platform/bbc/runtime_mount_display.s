@@ -61,6 +61,21 @@ _runtime_mount_display:
         sta     mounts_request+2
         sta     mounts_request+4
 
+        ; Clear this drive's display before querying DiskService.  A failed
+        ; LIST_MOUNTS response must not leave a stale tail of a URI (the
+        ; shared uri_buf is also used while assigning catalogue slots).
+        tay
+        lda     _runtime_offsets,y
+        clc
+        adc     #<_uri_buf
+        sta     ptr1
+        lda     #>_uri_buf
+        adc     #0
+        sta     ptr1+1
+        ldy     #0
+        lda     #0
+        sta     (ptr1),y
+
         ; -------------------------------------------------------------------
         ; fn_bbc_device_call_raw(
         ;     NIO_DEVICE_DISK,
