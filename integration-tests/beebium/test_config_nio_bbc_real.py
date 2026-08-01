@@ -81,10 +81,14 @@ def test_config_nio_bbc_browse_assign_mount_real_fujinet(
     press_key(bbc, "\r", wait=0.5)
 
     wait_for_screen_text(bbc, "images", evidence=screen_evidence, label="browse cfg")
+    wait_for_screen_text(bbc, "Path: /cfg/", evidence=screen_evidence,
+                         label="entered cfg directory")
     select_browse_entry(bbc, "images")
     press_key(bbc, "\r", wait=0.5)
 
     wait_for_screen_text(bbc, "longer-navtest.ssd", evidence=screen_evidence, label="browse image")
+    wait_for_screen_text(bbc, "Path: /cfg/images/", evidence=screen_evidence,
+                         label="entered images directory")
     select_browse_entry(bbc, "longer-navtest.ssd")
     press_key(bbc, "A")
     wait_for_screen_text(bbc, "Assign file to slot")
@@ -282,6 +286,48 @@ def test_config_nio_bbc_slots_cached_previous_page_renders_all_rows(
         screen_evidence.capture(bbc, "slots cached previous page")
     for slot in range(8, 16):
         assert str(slot) in rows[12 + slot - 8], rows[12 + slot - 8]
+
+
+def test_config_nio_bbc_assigning_slot_to_drive_one_keeps_mappings_intact(
+    beebium_config_nio, screen_evidence
+):
+    """Mapping a visible slot to D1 must not corrupt the allocation screen."""
+    bbc = beebium_config_nio
+
+    command(bbc, "*FUJI")
+    command(bbc, "*FHOST host:/cfg/images")
+    command(bbc, "*FIN 3 ctests.ssd")
+
+    type_text(bbc, "*CONFNIO\r")
+    wait_for_screen_text(bbc, "sd0:/")
+    press_key(bbc, "S", wait=0.5)
+    screen = wait_for_screen_text(
+        bbc, "Drive Mappings", evidence=screen_evidence, label="slots before D1 mapping"
+    )
+    assert "D0 BOOT" in screen
+    assert "D1 --" in screen
+    assert_slots_page_clean(screen)
+
+    # Switch to the slots pane, select slot 3, and assign it to drive 1.
+    press_key(bbc, "\t")
+    for _ in range(3):
+        tap_matrix(bbc, *ARROW_DOWN)
+    press_key(bbc, "1", wait=0.5)
+
+    screen = wait_for_screen_text(
+        bbc,
+        "D1 S3",
+        evidence=screen_evidence,
+        label="slot 3 mapped to drive 1",
+    )
+    rows = read_mode7_screen(bbc)
+    assert "D0 BOOT" in rows[7], rows[7]
+    assert "D1 S3" in rows[8], rows[8]
+    assert "D2 --" in rows[9], rows[9]
+    assert "D3 --" in rows[10], rows[10]
+    assert "Drive Mappings" in screen
+    assert "Slots" in screen
+    assert_slots_page_clean(screen)
 
 
 def test_config_nio_bbc_shows_cli_mapping_and_canonical_slot_uri(

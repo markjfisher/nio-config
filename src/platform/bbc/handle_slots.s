@@ -33,6 +33,7 @@
 .import _cputc
 
 .import _config_nio_refresh_slots
+.import _draw_slot_rows
 .import _config_nio_bbc_mapping_get
 .import _config_nio_bbc_mapping_set
 .import _config_nio_bbc_mapping_clear
@@ -164,7 +165,8 @@ slot_next_page:
         sta     (ptr1),y
 
         jsr     refresh_slots
-        jmp     return_true
+        jsr     redraw_slot_rows
+        jmp     return_false
 
 
 ; ---------------------------------------------------------------------------
@@ -192,12 +194,17 @@ store_previous_page:
         sta     (ptr1),y
 
         jsr     refresh_slots
-        jmp     return_true
+        jsr     redraw_slot_rows
+        jmp     return_false
 
 
 ; ---------------------------------------------------------------------------
 ; Move selected slot up
 ; ---------------------------------------------------------------------------
+
+redraw_slot_rows:
+        jsr     load_state_ax
+        jmp     _draw_slot_rows
 
 slot_up:
         lda     _selected_slot

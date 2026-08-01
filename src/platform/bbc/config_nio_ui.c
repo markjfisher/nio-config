@@ -459,15 +459,11 @@ static void set_browse_marker(uint8_t row, uint8_t selected)
   cputc(selected ? '>' : ' ');
 }
 
-void draw_slots(config_nio_state_t *state)
+void draw_slot_rows(config_nio_state_t *state)
 {
   uint8_t i;
-  char *runtime_name;
-  config_nio_mapping_t mapping;
   config_nio_slot_t slot;
 
-  load_screen_template("CNSLOTS");
-  runtime_name = uri_buf;
   for (i = 0; i < FNCTL_MAX_UNITS; i++) {
     gotoxy(CONFIG_NIO_BBC_SLOTS_SLOTS_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_SLOTS_Y + i));
     cputc((slots_focus && i == selected_slot) ? '>' : ' ');
@@ -479,6 +475,16 @@ void draw_slots(config_nio_state_t *state)
     else
       put_fixed("", CONFIG_NIO_BBC_SLOTS_SLOTS_URI_WIDTH);
   }
+}
+
+static void draw_drive_rows(config_nio_state_t *state)
+{
+  uint8_t i;
+  char *runtime_name;
+  config_nio_mapping_t mapping;
+  config_nio_slot_t slot;
+
+  runtime_name = uri_buf;
   for (i = 0; i < BBC_DRIVE_COUNT; i++) {
     gotoxy(CONFIG_NIO_BBC_SLOTS_DRIVES_X, (uint8_t) (CONFIG_NIO_BBC_SLOTS_DRIVES_Y + i));
     cputc((!slots_focus && i == selected_drive) ? '>' : ' ');
@@ -510,6 +516,13 @@ void draw_slots(config_nio_state_t *state)
     }
     runtime_name += 20;
   }
+}
+
+void draw_slots(config_nio_state_t *state)
+{
+  load_screen_template("CNSLOTS");
+  draw_slot_rows(state);
+  draw_drive_rows(state);
 }
 
 static void set_drive_marker(uint8_t row, uint8_t selected)

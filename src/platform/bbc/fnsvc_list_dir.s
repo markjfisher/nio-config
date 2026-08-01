@@ -289,7 +289,7 @@ _fnsvc_config_nio_list_directory_page:
         bcc     @required_fits
         bne     @entries_bad
         lda     tmp2
-        cmp     #<BBC_RESP_BUF_SIZE+1
+        cmp     #<(BBC_RESP_BUF_SIZE+1)
         bcs     @entries_bad
 @required_fits:
         lda     tmp4

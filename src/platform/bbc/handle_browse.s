@@ -298,8 +298,8 @@ browse_enter:
         jsr     load_browse_path_ax
         jsr     pushax
 
-        lda     #<entry_tmp+ENTRY_NAME
-        ldx     #>entry_tmp+ENTRY_NAME
+        lda     #<(entry_tmp+ENTRY_NAME)
+        ldx     #>(entry_tmp+ENTRY_NAME)
         jsr     _config_nio_bbc_enter_dir
 
         ; A failed enter still causes the screen to redraw in the C version.
