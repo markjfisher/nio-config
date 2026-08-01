@@ -288,7 +288,7 @@ static int enter_dir(config_nio_state_t *state, const char *name)
   return 1;
 }
 
-static int fetch_browse_page(config_nio_state_t *state)
+int fetch_browse_page(config_nio_state_t *state)
 {
   uint8_t ok;
   uint16_t fetch_start;
@@ -337,7 +337,7 @@ static void reset_browse_pages(void)
   browse_page_depth = 0;
 }
 
-static int fetch_next_browse_page(config_nio_state_t *state)
+int fetch_next_browse_page(config_nio_state_t *state)
 {
   uint16_t old_start;
 
@@ -355,7 +355,7 @@ static int fetch_next_browse_page(config_nio_state_t *state)
   return 0;
 }
 
-static int fetch_previous_browse_page(config_nio_state_t *state)
+int fetch_previous_browse_page(config_nio_state_t *state)
 {
   if (browse_page_depth > 0)
     browse_start = browse_page_stack[--browse_page_depth];
@@ -654,7 +654,7 @@ static void clear_host(config_nio_state_t *state)
   config_nio_set_status(state, "Cleared");
 }
 
-static void assign_selected_file(config_nio_state_t *state)
+void assign_selected_file(config_nio_state_t *state)
 {
   uint8_t slot;
   config_nio_entry_t entry;
@@ -743,67 +743,67 @@ uint8_t handle_hosts(config_nio_state_t *state, int key)
   return 0;
 }
 
-uint8_t handle_browse(config_nio_state_t *state, int key)
-{
-  uint8_t old;
+// uint8_t handle_browse(config_nio_state_t *state, int key)
+// {
+//   uint8_t old;
 
-  if (key == 'H') {
-    current_screen = SCREEN_HOSTS;
-    return 1;
-  }
-  old = selected_entry;
-  if (key_is_up(key)) {
-    if (selected_entry > 0) {
-      selected_entry--;
-      set_browse_marker(old, 0);
-      set_browse_marker(selected_entry, 1);
-      return 0;
-    } else if (browse_start > 0) {
-      return (uint8_t) fetch_previous_browse_page(state);
-    }
-  } else if (key_is_down(key)) {
-    if (selected_entry + 1 < state->entry_count) {
-      selected_entry++;
-      set_browse_marker(old, 0);
-      set_browse_marker(selected_entry, 1);
-      return 0;
-    } else if (browse_more) {
-      return (uint8_t) fetch_next_browse_page(state);
-    }
-  } else if (key_is_right(key) && browse_more) {
-    return (uint8_t) fetch_next_browse_page(state);
-  } else if (key_is_left(key) && browse_start > 0) {
-    return (uint8_t) fetch_previous_browse_page(state);
-  } else if (key == 'u' || key == 'U') {
-    parent_path(state->browse_path);
-    browse_start = 0;
-    reset_browse_pages();
-    (void) fetch_browse_page(state);
-    return 1;
-  } else if (key == 'a' || key == 'A') {
-    assign_selected_file(state);
-    return 1;
-  } else if ((key == '\r' || key == '\n') && state->entry_count > 0) {
-    config_nio_entry_t entry;
+//   if (key == 'H') {
+//     current_screen = SCREEN_HOSTS;
+//     return 1;
+//   }
+//   old = selected_entry;
+//   if (key_is_up(key)) {
+//     if (selected_entry > 0) {
+//       selected_entry--;
+//       set_browse_marker(old, 0);
+//       set_browse_marker(selected_entry, 1);
+//       return 0;
+//     } else if (browse_start > 0) {
+//       return (uint8_t) fetch_previous_browse_page(state);
+//     }
+//   } else if (key_is_down(key)) {
+//     if (selected_entry + 1 < state->entry_count) {
+//       selected_entry++;
+//       set_browse_marker(old, 0);
+//       set_browse_marker(selected_entry, 1);
+//       return 0;
+//     } else if (browse_more) {
+//       return (uint8_t) fetch_next_browse_page(state);
+//     }
+//   } else if (key_is_right(key) && browse_more) {
+//     return (uint8_t) fetch_next_browse_page(state);
+//   } else if (key_is_left(key) && browse_start > 0) {
+//     return (uint8_t) fetch_previous_browse_page(state);
+//   } else if (key == 'u' || key == 'U') {
+//     parent_path(state->browse_path);
+//     browse_start = 0;
+//     reset_browse_pages();
+//     (void) fetch_browse_page(state);
+//     return 1;
+//   } else if (key == 'a' || key == 'A') {
+//     assign_selected_file(state);
+//     return 1;
+//   } else if ((key == '\r' || key == '\n') && state->entry_count > 0) {
+//     config_nio_entry_t entry;
 
-    if (config_nio_entry_get(state, selected_entry, &entry) &&
-        (entry.is_dir & CONFIG_NIO_ENTRY_FLAG_DIR)) {
-      if (entry.is_dir & CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED) {
-        config_nio_set_status(state, "Name too long");
-        return 1;
-      }
-      if (enter_dir(state, entry.name)) {
-        browse_start = 0;
-        reset_browse_pages();
-        (void) fetch_browse_page(state);
-      }
-    } else {
-      assign_selected_file(state);
-    }
-    return 1;
-  }
-  return 0;
-}
+//     if (config_nio_entry_get(state, selected_entry, &entry) &&
+//         (entry.is_dir & CONFIG_NIO_ENTRY_FLAG_DIR)) {
+//       if (entry.is_dir & CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED) {
+//         config_nio_set_status(state, "Name too long");
+//         return 1;
+//       }
+//       if (enter_dir(state, entry.name)) {
+//         browse_start = 0;
+//         reset_browse_pages();
+//         (void) fetch_browse_page(state);
+//       }
+//     } else {
+//       assign_selected_file(state);
+//     }
+//     return 1;
+//   }
+//   return 0;
+// }
 
 // uint8_t handle_slots(config_nio_state_t *state, int key)
 // {
