@@ -805,108 +805,108 @@ uint8_t handle_browse(config_nio_state_t *state, int key)
   return 0;
 }
 
-uint8_t handle_slots(config_nio_state_t *state, int key)
-{
-  uint8_t old;
-  config_nio_mapping_t mapping;
+// uint8_t handle_slots(config_nio_state_t *state, int key)
+// {
+//   uint8_t old;
+//   config_nio_mapping_t mapping;
 
-  if (key == '	') {
-    if (slots_focus)
-      set_slot_marker(selected_slot, 0);
-    else
-      set_drive_marker(selected_drive, 0);
-    slots_focus = (uint8_t) !slots_focus;
-    if (slots_focus)
-      set_slot_marker(selected_slot, 1);
-    else
-      set_drive_marker(selected_drive, 1);
-    return 0;
-  }
-  if (slots_focus) {
-    if (key_is_next_page(key) && state->slots_more) {
-      state->slot_start = (uint8_t) (state->slot_start + FNCTL_MAX_UNITS);
-      (void) config_nio_refresh_slots(state);
-      return 1;
-    } else if (key_is_previous_page(key) && state->slot_start) {
-      state->slot_start = state->slot_start >= FNCTL_MAX_UNITS
-                        ? (uint8_t) (state->slot_start - FNCTL_MAX_UNITS) : 0;
-      (void) config_nio_refresh_slots(state);
-      return 1;
-    }
-    if (key_is_up(key) && selected_slot > 0) {
-      old = selected_slot;
-      selected_slot--;
-      set_slot_marker(old, 0);
-      set_slot_marker(selected_slot, 1);
-      return 0;
-    } else if (key_is_down(key) && selected_slot + 1 < FNCTL_MAX_UNITS) {
-      old = selected_slot;
-      selected_slot++;
-      set_slot_marker(old, 0);
-      set_slot_marker(selected_slot, 1);
-      return 0;
-    } else if (key >= '0' && key < '0' + BBC_DRIVE_COUNT) {
-      uint8_t unit = (uint8_t) (key - '0');
+//   if (key == '	') {
+//     if (slots_focus)
+//       set_slot_marker(selected_slot, 0);
+//     else
+//       set_drive_marker(selected_drive, 0);
+//     slots_focus = (uint8_t) !slots_focus;
+//     if (slots_focus)
+//       set_slot_marker(selected_slot, 1);
+//     else
+//       set_drive_marker(selected_drive, 1);
+//     return 0;
+//   }
+//   if (slots_focus) {
+//     if (key_is_next_page(key) && state->slots_more) {
+//       state->slot_start = (uint8_t) (state->slot_start + FNCTL_MAX_UNITS);
+//       (void) config_nio_refresh_slots(state);
+//       return 1;
+//     } else if (key_is_previous_page(key) && state->slot_start) {
+//       state->slot_start = state->slot_start >= FNCTL_MAX_UNITS
+//                         ? (uint8_t) (state->slot_start - FNCTL_MAX_UNITS) : 0;
+//       (void) config_nio_refresh_slots(state);
+//       return 1;
+//     }
+//     if (key_is_up(key) && selected_slot > 0) {
+//       old = selected_slot;
+//       selected_slot--;
+//       set_slot_marker(old, 0);
+//       set_slot_marker(selected_slot, 1);
+//       return 0;
+//     } else if (key_is_down(key) && selected_slot + 1 < FNCTL_MAX_UNITS) {
+//       old = selected_slot;
+//       selected_slot++;
+//       set_slot_marker(old, 0);
+//       set_slot_marker(selected_slot, 1);
+//       return 0;
+//     } else if (key >= '0' && key < '0' + BBC_DRIVE_COUNT) {
+//       uint8_t unit = (uint8_t) (key - '0');
 
-      mapping.valid = 1;
-      mapping.slot = (uint8_t) (state->slot_start + selected_slot);
-      mapping.readonly = 0;
-      (void) config_nio_mapping_set(state, unit, &mapping);
-      (void) config_nio_save_mappings(state);
-      selected_drive = unit;
-      config_nio_set_status(state, "Map saved");
-      return 1;
-    } else if (key == 'c' || key == 'C') {
-      uint8_t unit;
+//       mapping.valid = 1;
+//       mapping.slot = (uint8_t) (state->slot_start + selected_slot);
+//       mapping.readonly = 0;
+//       (void) config_nio_mapping_set(state, unit, &mapping);
+//       (void) config_nio_save_mappings(state);
+//       selected_drive = unit;
+//       config_nio_set_status(state, "Map saved");
+//       return 1;
+//     } else if (key == 'c' || key == 'C') {
+//       uint8_t unit;
 
-      uint8_t absolute = (uint8_t) (state->slot_start + selected_slot);
-      if (!config_nio_delete_slot(state, absolute)) {
-        config_nio_set_status(state, "Clear fail");
-        return 1;
-      }
-      for (unit = 0; unit < FNCTL_MAX_UNITS; unit++) {
-        if (config_nio_mapping_get(state, unit, &mapping) &&
-            mapping.valid && mapping.slot == absolute)
-          (void) config_nio_mapping_clear(state, unit);
-      }
-      (void) config_nio_save_mappings(state);
-      (void) config_nio_refresh_slots(state);
-      config_nio_set_status(state, "Cleared");
-      return 1;
-    } else if (key == 'e' || key == 'E') {
-      config_nio_set_status(state, "Change via Hosts");
-      return 1;
-    }
-    return 0;
-  }
+//       uint8_t absolute = (uint8_t) (state->slot_start + selected_slot);
+//       if (!config_nio_delete_slot(state, absolute)) {
+//         config_nio_set_status(state, "Clear fail");
+//         return 1;
+//       }
+//       for (unit = 0; unit < FNCTL_MAX_UNITS; unit++) {
+//         if (config_nio_mapping_get(state, unit, &mapping) &&
+//             mapping.valid && mapping.slot == absolute)
+//           (void) config_nio_mapping_clear(state, unit);
+//       }
+//       (void) config_nio_save_mappings(state);
+//       (void) config_nio_refresh_slots(state);
+//       config_nio_set_status(state, "Cleared");
+//       return 1;
+//     } else if (key == 'e' || key == 'E') {
+//       config_nio_set_status(state, "Change via Hosts");
+//       return 1;
+//     }
+//     return 0;
+//   }
 
-  old = selected_drive;
-  if (key_is_up(key) && selected_drive > 0) {
-    selected_drive--;
-    set_drive_marker(old, 0);
-    set_drive_marker(selected_drive, 1);
-    return 0;
-  } else if (key_is_down(key) && selected_drive + 1 < BBC_DRIVE_COUNT) {
-    selected_drive++;
-    set_drive_marker(old, 0);
-    set_drive_marker(selected_drive, 1);
-    return 0;
-  } else if (key == 'r' || key == 'R') {
-    if (config_nio_mapping_get(state, selected_drive, &mapping) &&
-        mapping.valid) {
-      mapping.readonly = (uint8_t) !mapping.readonly;
-      (void) config_nio_mapping_set(state, selected_drive, &mapping);
-      (void) config_nio_save_mappings(state);
-    }
-    return 1;
-  } else if (key == 'c' || key == 'C') {
-    (void) config_nio_mapping_clear(state, selected_drive);
-    (void) config_nio_save_mappings(state);
-    config_nio_set_status(state, "Map clear");
-    return 1;
-  }
-  return 0;
-}
+//   old = selected_drive;
+//   if (key_is_up(key) && selected_drive > 0) {
+//     selected_drive--;
+//     set_drive_marker(old, 0);
+//     set_drive_marker(selected_drive, 1);
+//     return 0;
+//   } else if (key_is_down(key) && selected_drive + 1 < BBC_DRIVE_COUNT) {
+//     selected_drive++;
+//     set_drive_marker(old, 0);
+//     set_drive_marker(selected_drive, 1);
+//     return 0;
+//   } else if (key == 'r' || key == 'R') {
+//     if (config_nio_mapping_get(state, selected_drive, &mapping) &&
+//         mapping.valid) {
+//       mapping.readonly = (uint8_t) !mapping.readonly;
+//       (void) config_nio_mapping_set(state, selected_drive, &mapping);
+//       (void) config_nio_save_mappings(state);
+//     }
+//     return 1;
+//   } else if (key == 'c' || key == 'C') {
+//     (void) config_nio_mapping_clear(state, selected_drive);
+//     (void) config_nio_save_mappings(state);
+//     config_nio_set_status(state, "Map clear");
+//     return 1;
+//   }
+//   return 0;
+// }
 
 // void config_nio_run(config_nio_state_t *state)
 // {
