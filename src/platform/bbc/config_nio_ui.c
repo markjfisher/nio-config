@@ -7,8 +7,9 @@
 
 #include "fn_bbc_internal.h"
 
-extern uint8_t label_width (const char *label);
 extern int prompt_host(void);
+extern uint8_t key_is_next_page(char key);
+extern uint8_t key_is_previous_page(char key);
 
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
 #define BBC_ROWS CONFIG_NIO_BBC_SCREEN_HEIGHT
@@ -34,15 +35,15 @@ extern int prompt_host(void);
 #define key_is_right(key) ((key) == CH_CURS_RIGHT)
 #define key_is_escape(key) ((key) == CH_ESC)
 
-static uint8_t key_is_next_page(int key)
-{
-  return (uint8_t) (key_is_right(key) || key == 'n' || key == 'N' || key == '>');
-}
+// static uint8_t key_is_next_page(int key)
+// {
+//   return (uint8_t) (key_is_right(key) || key == 'n' || key == 'N' || key == '>');
+// }
 
-static uint8_t key_is_previous_page(int key)
-{
-  return (uint8_t) (key_is_left(key) || key == 'p' || key == 'P' || key == '<');
-}
+// static uint8_t key_is_previous_page(int key)
+// {
+//   return (uint8_t) (key_is_left(key) || key == 'p' || key == 'P' || key == '<');
+// }
 
 enum {
   SCREEN_HOSTS,
@@ -564,7 +565,7 @@ static int prompt_assign_slot(config_nio_state_t *state, uint8_t *slot_out)
   draw_assign_slots(state, slot);
 
   for (;;) {
-    int key;
+    char key;
     uint8_t old;
 
     key = cgetc();
