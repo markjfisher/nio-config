@@ -8,6 +8,7 @@
 #include "fn_bbc_internal.h"
 
 extern uint8_t label_width (const char *label);
+extern int prompt_host(void);
 
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
 #define BBC_ROWS CONFIG_NIO_BBC_SCREEN_HEIGHT
@@ -178,6 +179,7 @@ static void mode7(void)
 {
   cputc(22);
   cputc(7);
+  bbc_cursor(0);
 }
 
 static void text_at(uint8_t x, uint8_t y, const char *s)
@@ -186,7 +188,7 @@ static void text_at(uint8_t x, uint8_t y, const char *s)
   cputs(s ? s : "");
 }
 
-static void clear_field(uint8_t x, uint8_t y, uint8_t width)
+void clear_field(uint8_t x, uint8_t y, uint8_t width)
 {
   gotoxy(x, y);
   put_fixed("", width);
@@ -214,57 +216,57 @@ static void load_screen_template(const char *asset_name)
   config_nio_bbc_load_template(asset_name);
 }
 
-static int prompt_line(const char *label, char *buf, uint8_t cap)
-{
-  uint8_t label_len;
-  uint8_t width;
-  uint8_t x;
-  uint8_t y;
-  uint8_t clear_x;
-  uint8_t clear_width;
-  int result;
+// static int prompt_line(const char *label, char *buf, uint8_t cap)
+// {
+//   uint8_t label_len;
+//   uint8_t width;
+//   uint8_t x;
+//   uint8_t y;
+//   uint8_t clear_x;
+//   uint8_t clear_width;
+//   int result;
 
-  if (!buf || cap == 0)
-    return 0;
+//   if (!buf || cap == 0)
+//     return 0;
 
-  label_len = label_width(label ? label : "Value");
-  if (current_screen == SCREEN_BROWSE) {
-    x = CONFIG_NIO_BBC_BROWSE_INPUT_TEXT_X;
-    y = CONFIG_NIO_BBC_BROWSE_INPUT_Y;
-    clear_x = CONFIG_NIO_BBC_BROWSE_INPUT_LABEL_X;
-    width = CONFIG_NIO_BBC_BROWSE_INPUT_WIDTH;
-    clear_width = CONFIG_NIO_BBC_BROWSE_INPUT_CLEAR_WIDTH;
-  } else {
-    x = BBC_HOST_TEXT_X;
-    y = (uint8_t) (CONFIG_NIO_BBC_HOSTS_ROWS_Y + selected_host - hosts_start);
-    clear_x = x;
-    width = CONFIG_NIO_BBC_HOSTS_ROWS_URI_WIDTH;
-    clear_width = width;
-  }
-  if (cap <= width)
-    width = (cap - 1);
-  if (width == 0)
-    return 0;
+//   label_len = label_width(label ? label : "Value");
+//   if (current_screen == SCREEN_BROWSE) {
+//     x = CONFIG_NIO_BBC_BROWSE_INPUT_TEXT_X;
+//     y = CONFIG_NIO_BBC_BROWSE_INPUT_Y;
+//     clear_x = CONFIG_NIO_BBC_BROWSE_INPUT_LABEL_X;
+//     width = CONFIG_NIO_BBC_BROWSE_INPUT_WIDTH;
+//     clear_width = CONFIG_NIO_BBC_BROWSE_INPUT_CLEAR_WIDTH;
+//   } else {
+//     x = BBC_HOST_TEXT_X;
+//     y = (uint8_t) (CONFIG_NIO_BBC_HOSTS_ROWS_Y + selected_host - hosts_start);
+//     clear_x = x;
+//     width = CONFIG_NIO_BBC_HOSTS_ROWS_URI_WIDTH;
+//     clear_width = width;
+//   }
+//   if (cap <= width)
+//     width = (cap - 1);
+//   if (width == 0)
+//     return 0;
 
-  clear_field(clear_x, y, clear_width);
-  if (current_screen == SCREEN_BROWSE) {
-    cputs(label ? label : "Value");
-    cputs(":");
-    if (label_len < 5)
-      put_fixed("", (uint8_t) (5 - label_len));
-  }
-  clear_field(x, y, width);
+//   clear_field(clear_x, y, clear_width);
+//   if (current_screen == SCREEN_BROWSE) {
+//     cputs(label ? label : "Value");
+//     cputs(":");
+//     if (label_len < 5)
+//       put_fixed("", (uint8_t) (5 - label_len));
+//   }
+//   clear_field(x, y, width);
 
-  config_nio_bbc_edit_buf = buf;
-  config_nio_bbc_edit_cap = cap;
-  config_nio_bbc_edit_x = x;
-  config_nio_bbc_edit_y = y;
-  config_nio_bbc_edit_width = width;
-  result = config_nio_bbc_edit_line();
-  if (current_screen == SCREEN_BROWSE)
-    clear_field(clear_x, y, clear_width);
-  return result;
-}
+//   config_nio_bbc_edit_buf = buf;
+//   config_nio_bbc_edit_cap = cap;
+//   config_nio_bbc_edit_x = x;
+//   config_nio_bbc_edit_y = y;
+//   config_nio_bbc_edit_width = width;
+//   result = config_nio_bbc_edit_line();
+//   if (current_screen == SCREEN_BROWSE)
+//     clear_field(clear_x, y, clear_width);
+//   return result;
+// }
 
 static void parent_path(char *path)
 {
@@ -618,7 +620,8 @@ static void edit_host(config_nio_state_t *state)
     (void) config_nio_host_get(state, selected_host, edit_buf, BBC_EDIT_BUF_SIZE);
   else
     edit_buf[0] = 0;
-  if (!prompt_line("Host", edit_buf, BBC_EDIT_BUF_SIZE) || !edit_buf[0])
+  if (!prompt_host() || !edit_buf[0])
+  // if (!prompt_line("Host", edit_buf, BBC_EDIT_BUF_SIZE) || !edit_buf[0])
     return;
   (void) config_nio_host_set(state, selected_host, edit_buf);
   if (selected_host >= state->host_count)
@@ -918,9 +921,6 @@ void config_nio_run(config_nio_state_t *state)
     int key;
     uint8_t redraw;
 
-    /* Editing deliberately enables the cursor.  Restore the application-wide
-     * hidden state before waiting for the next command or key. */
-    bbc_cursor(0);
     key = cgetc();
     redraw = 0;
     if (key_is_quit(key)) {
