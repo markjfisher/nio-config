@@ -230,11 +230,10 @@ prefix_ok:
         ;
         ;   display = &uri_buf[runtime_offsets[unit]]
         ;
-        ; runtime_offsets is assumed to be uint16_t[].
+        ; runtime_offsets is a uint8_t[] of offsets within uri_buf.
         ; -------------------------------------------------------------------
 
         lda     mounts_request+2
-        asl     a
         tay
 
         lda     _runtime_offsets,y
@@ -242,9 +241,8 @@ prefix_ok:
         adc     #<_uri_buf
         sta     ptr1
 
-        iny
-        lda     _runtime_offsets,y
-        adc     #>_uri_buf
+        lda     #>_uri_buf
+        adc     #0
         sta     ptr1+1
 
         ; Begin immediately after "<unit>: ".
