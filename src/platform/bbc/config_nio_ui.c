@@ -7,10 +7,14 @@
 
 #include "fn_bbc_internal.h"
 
+// ASM implementations
 extern int prompt_host(void);
 extern uint8_t key_is_next_page(char key);
 extern uint8_t key_is_previous_page(char key);
 extern void put_slot_index(uint8_t value);
+extern void config_nio_run(config_nio_state_t *state);
+extern char *runtime_mount_display(uint8_t unit);
+
 
 #define BBC_WIDTH CONFIG_NIO_BBC_SCREEN_WIDTH
 #define BBC_ROWS CONFIG_NIO_BBC_SCREEN_HEIGHT
@@ -55,66 +59,66 @@ enum {
 extern uint8_t config_nio_store_buf[];
 #define edit_buf ((char *) config_nio_store_buf)
 char uri_buf[BBC_URI_WORK_MAX];
-static const uint8_t runtime_offsets[] = { 0, 20, 40, 60 };
+const uint8_t runtime_offsets[] = { 0, 20, 40, 60 };
 
 /* Runtime mounts are deliberately transient: config-nio's persistent mapping
  * table contains catalogue-slot assignments, while boot/FBOOT mounts are
  * DiskService state and do not necessarily have a catalogue slot. */
 extern uint8_t fnsvc_bbc_resp_buf[];
-static char *runtime_mount_display(uint8_t unit)
-{
-  char *display;
-  uint8_t request[10];
-  uint8_t device_status;
-  uint8_t result;
-  uint16_t response_len;
-  const uint8_t *start;
-  const uint8_t *end;
-  const uint8_t *uri;
-  const uint8_t *name;
-  const uint8_t *p;
-  uint8_t len;
+// static char *runtime_mount_display(uint8_t unit)
+// {
+//   char *display;
+//   uint8_t request[10];
+//   uint8_t device_status;
+//   uint8_t result;
+//   uint16_t response_len;
+//   const uint8_t *start;
+//   const uint8_t *end;
+//   const uint8_t *uri;
+//   const uint8_t *name;
+//   const uint8_t *p;
+//   uint8_t len;
 
-  display = &uri_buf[runtime_offsets[unit]];
-  request[0] = 1;
-  request[1] = 1;
-  request[2] = unit;
-  request[3] = 0;
-  request[4] = unit;
-  request[5] = 0;
-  request[6] = 0;
-  request[7] = 0;
-  request[8] = (uint8_t) (BBC_MOUNTS_PAYLOAD & 0xFF);
-  request[9] = (uint8_t) (BBC_MOUNTS_PAYLOAD >> 8);
-  result = fn_bbc_device_call_raw(
-      NIO_DEVICE_DISK, NIO_DISK_LIST_MOUNTS, request, sizeof(request),
-      fnsvc_bbc_resp_buf, NIO_DISK_LIST_MOUNTS_RESPONSE, &device_status,
-      &response_len);
-  if (result != 0 || device_status != 0 ||
-      response_len < NIO_DISK_LIST_MOUNTS_HEADER ||
-      fnsvc_bbc_resp_buf[0] != 1 || (fnsvc_bbc_resp_buf[1] & 0x02) == 0 ||
-      fnsvc_bbc_resp_buf[6] == 0)
-    return 0;
+//   display = &uri_buf[runtime_offsets[unit]];
+//   request[0] = 1;
+//   request[1] = 1;
+//   request[2] = unit;
+//   request[3] = 0;
+//   request[4] = unit;
+//   request[5] = 0;
+//   request[6] = 0;
+//   request[7] = 0;
+//   request[8] = (uint8_t) (BBC_MOUNTS_PAYLOAD & 0xFF);
+//   request[9] = (uint8_t) (BBC_MOUNTS_PAYLOAD >> 8);
+//   result = fn_bbc_device_call_raw(
+//       NIO_DEVICE_DISK, NIO_DISK_LIST_MOUNTS, request, sizeof(request),
+//       fnsvc_bbc_resp_buf, NIO_DISK_LIST_MOUNTS_RESPONSE, &device_status,
+//       &response_len);
+//   if (result != 0 || device_status != 0 ||
+//       response_len < NIO_DISK_LIST_MOUNTS_HEADER ||
+//       fnsvc_bbc_resp_buf[0] != 1 || (fnsvc_bbc_resp_buf[1] & 0x02) == 0 ||
+//       fnsvc_bbc_resp_buf[6] == 0)
+//     return 0;
 
-  start = fnsvc_bbc_resp_buf + NIO_DISK_LIST_MOUNTS_HEADER;
-  end = start + fnsvc_bbc_resp_buf[8];
-  if (fnsvc_bbc_resp_buf[8] < 8 || start[0] != (uint8_t) ('0' + unit) ||
-      start[1] != ':' || start[2] != ' ')
-    return 0;
-  uri = start + 3;
-  while (uri < end && *uri != ' ') uri++;
-  while (uri < end && *uri == ' ') uri++;
-  name = uri;
-  for (p = uri; p < end; p++)
-    if (*p == '/' || *p == ':') name = p + 1;
-  len = (uint8_t) (end - name);
-  if (len > BBC_RUNTIME_NAME_WIDTH) len = BBC_RUNTIME_NAME_WIDTH;
-  memcpy(display, name, len);
-  display[len] = 0;
-  return display;
-}
+//   start = fnsvc_bbc_resp_buf + NIO_DISK_LIST_MOUNTS_HEADER;
+//   end = start + fnsvc_bbc_resp_buf[8];
+//   if (fnsvc_bbc_resp_buf[8] < 8 || start[0] != (uint8_t) ('0' + unit) ||
+//       start[1] != ':' || start[2] != ' ')
+//     return 0;
+//   uri = start + 3;
+//   while (uri < end && *uri != ' ') uri++;
+//   while (uri < end && *uri == ' ') uri++;
+//   name = uri;
+//   for (p = uri; p < end; p++)
+//     if (*p == '/' || *p == ':') name = p + 1;
+//   len = (uint8_t) (end - name);
+//   if (len > BBC_RUNTIME_NAME_WIDTH) len = BBC_RUNTIME_NAME_WIDTH;
+//   memcpy(display, name, len);
+//   display[len] = 0;
+//   return display;
+// }
 
-static void refresh_runtime_mounts(void)
+void refresh_runtime_mounts(void)
 {
   uint8_t i;
 
@@ -177,7 +181,7 @@ int config_nio_bbc_enter_dir(char *path, const char *name);
 #define put_tail(s, width) config_nio_bbc_put_tail((s), (width))
 #define put_basename(s, width) config_nio_bbc_put_basename((s), (width))
 
-static void mode7(void)
+void mode7(void)
 {
   cputc(22);
   cputc(7);
@@ -383,7 +387,7 @@ static uint8_t host_page_start(uint8_t host)
   return start;
 }
 
-static void show_hosts(config_nio_state_t *state)
+void show_hosts(config_nio_state_t *state)
 {
   uint8_t i;
   uint8_t host;
@@ -423,7 +427,7 @@ static void set_host_marker(uint8_t host, uint8_t selected)
   cputc(selected ? '>' : ' ');
 }
 
-static void draw_browse(config_nio_state_t *state)
+void draw_browse(config_nio_state_t *state)
 {
   uint8_t i;
   config_nio_entry_t entry;
@@ -455,7 +459,7 @@ static void set_browse_marker(uint8_t row, uint8_t selected)
   cputc(selected ? '>' : ' ');
 }
 
-static void draw_slots(config_nio_state_t *state)
+void draw_slots(config_nio_state_t *state)
 {
   uint8_t i;
   char *runtime_name;
@@ -684,7 +688,7 @@ static void assign_selected_file(config_nio_state_t *state)
   config_nio_set_status(state, "Assigned");
 }
 
-static uint8_t handle_hosts(config_nio_state_t *state, int key)
+uint8_t handle_hosts(config_nio_state_t *state, int key)
 {
   uint8_t old;
 
@@ -739,7 +743,7 @@ static uint8_t handle_hosts(config_nio_state_t *state, int key)
   return 0;
 }
 
-static uint8_t handle_browse(config_nio_state_t *state, int key)
+uint8_t handle_browse(config_nio_state_t *state, int key)
 {
   uint8_t old;
 
@@ -801,7 +805,7 @@ static uint8_t handle_browse(config_nio_state_t *state, int key)
   return 0;
 }
 
-static uint8_t handle_slots(config_nio_state_t *state, int key)
+uint8_t handle_slots(config_nio_state_t *state, int key)
 {
   uint8_t old;
   config_nio_mapping_t mapping;
@@ -904,60 +908,60 @@ static uint8_t handle_slots(config_nio_state_t *state, int key)
   return 0;
 }
 
-void config_nio_run(config_nio_state_t *state)
-{
-  int done;
+// void config_nio_run(config_nio_state_t *state)
+// {
+//   int done;
 
-  mode7();
-  current_screen = SCREEN_HOSTS;
-  selected_host = 0;
-  hosts_start = 0;
-  selected_drive = 0;
-  selected_slot = 0;
-  assign_slot_start = 0;
-  slots_focus = 0;
-  done = 0;
-  show_hosts(state);
+//   mode7();
+//   current_screen = SCREEN_HOSTS;
+//   selected_host = 0;
+//   hosts_start = 0;
+//   selected_drive = 0;
+//   selected_slot = 0;
+//   assign_slot_start = 0;
+//   slots_focus = 0;
+//   done = 0;
+//   show_hosts(state);
 
-  while (!done) {
-    int key;
-    uint8_t redraw;
+//   while (!done) {
+//     int key;
+//     uint8_t redraw;
 
-    key = cgetc();
-    redraw = 0;
-    if (key_is_quit(key)) {
-      done = 1;
-    } else if (key == 'h' || key == 'H') {
-      current_screen = SCREEN_HOSTS;
-      redraw = 1;
-    } else if (key == 's' || key == 'S') {
-      current_screen = SCREEN_SLOTS;
-      /* Runtime mount responses share the slot cache response buffer.  Read
-       * them once before refilling the active page; redraws must not query
-       * DiskService or cached pages are destroyed. */
-      config_nio_bbc_invalidate_slot_cache();
-      refresh_runtime_mounts();
-      (void) config_nio_refresh_slots(state);
-      redraw = 1;
-    } else if (key == 'm' || key == 'M') {
-      (void) config_nio_mount_mappings(state);
-      done = 1;
-    } else if (current_screen == SCREEN_HOSTS) {
-      redraw = handle_hosts(state, key);
-    } else if (current_screen == SCREEN_BROWSE) {
-      redraw = handle_browse(state, key);
-    } else {
-      redraw = handle_slots(state, key);
-    }
+//     key = cgetc();
+//     redraw = 0;
+//     if (key_is_quit(key)) {
+//       done = 1;
+//     } else if (key == 'h' || key == 'H') {
+//       current_screen = SCREEN_HOSTS;
+//       redraw = 1;
+//     } else if (key == 's' || key == 'S') {
+//       current_screen = SCREEN_SLOTS;
+//       /* Runtime mount responses share the slot cache response buffer.  Read
+//        * them once before refilling the active page; redraws must not query
+//        * DiskService or cached pages are destroyed. */
+//       config_nio_bbc_invalidate_slot_cache();
+//       refresh_runtime_mounts();
+//       (void) config_nio_refresh_slots(state);
+//       redraw = 1;
+//     } else if (key == 'm' || key == 'M') {
+//       (void) config_nio_mount_mappings(state);
+//       done = 1;
+//     } else if (current_screen == SCREEN_HOSTS) {
+//       redraw = handle_hosts(state, key);
+//     } else if (current_screen == SCREEN_BROWSE) {
+//       redraw = handle_browse(state, key);
+//     } else {
+//       redraw = handle_slots(state, key);
+//     }
 
-    if (redraw && !done) {
-      if (current_screen == SCREEN_HOSTS)
-        show_hosts(state);
-      else if (current_screen == SCREEN_BROWSE)
-        draw_browse(state);
-      else
-        draw_slots(state);
-    }
-  }
-  clrscr();
-}
+//     if (redraw && !done) {
+//       if (current_screen == SCREEN_HOSTS)
+//         show_hosts(state);
+//       else if (current_screen == SCREEN_BROWSE)
+//         draw_browse(state);
+//       else
+//         draw_slots(state);
+//     }
+//   }
+//   clrscr();
+// }

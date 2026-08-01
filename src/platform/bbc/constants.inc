@@ -5,3 +5,15 @@ CH_EOL          = $0D
 CH_CURS_LEFT    = $88
 CH_CURS_RIGHT   = $89
 CH_DEL          = $7F
+
+BBC_EDIT_BUF_SIZE               := 97
+BBC_RUNTIME_NAME_WIDTH          := 19
+NIO_DISK_LIST_MOUNTS_HEADER     := 10
+NIO_DISK_LIST_MOUNTS            := $0D
+BBC_MOUNTS_PAYLOAD              := 240
+NIO_DISK_LIST_MOUNTS_RESPONSE   := BBC_MOUNTS_PAYLOAD + NIO_DISK_LIST_MOUNTS_HEADER
+NIO_DEVICE_DISK                 := $FC
+
+SCREEN_HOSTS            := 0
+SCREEN_BROWSE           := 1
+SCREEN_SLOTS            := 2

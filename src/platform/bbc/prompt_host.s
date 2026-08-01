@@ -30,11 +30,8 @@
 .import _config_nio_bbc_edit_width
 
 .include "config_nio_layout.inc"
+.include "constants.inc"
 
-BBC_EDIT_BUF_SIZE       := 97
-SCREEN_HOSTS            := 0
-SCREEN_BROWSE           := 1
-SCREEN_SLOTS            := 2
 BBC_HOST_TEXT_X         := CONFIG_NIO_BBC_HOSTS_ROWS_X + 4
 
 _edit_buf = _config_nio_store_buf

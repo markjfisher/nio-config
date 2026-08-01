@@ -12,6 +12,7 @@
         .import _config_nio_bbc_slot_set
         .import _fn_slot_catalog_call
         .import popa, pusha, pushax
+        .import return0, return1
         .importzp ptr1, ptr2, tmp1, tmp2, tmp3, tmp4
 
 SLOT_CATALOG_CMD_RANGE      = $04
@@ -48,16 +49,6 @@ mutation_command: .res 1
 mutation_request_len: .res 1
 
         .code
-
-return0:
-        lda     #0
-        tax
-        rts
-
-return1:
-        lda     #1
-        ldx     #0
-        rts
 
 ; Complete a Slot Catalog call and accept only a successful response whose
 ; first byte is the protocol version. Command is in A, request length in X.
