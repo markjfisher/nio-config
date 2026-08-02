@@ -14,7 +14,6 @@
 
 .import _mode7
 .import _cgetc
-.import _clrscr
 
 .import _show_hosts
 .import _draw_browse
@@ -77,8 +76,6 @@ mount_and_exit:
 ; ---------------------------------------------------------------------------
 
 exit:
-        jsr     _clrscr
-
         ; Remove the saved state pointer and return.
         jmp     incsp2
 

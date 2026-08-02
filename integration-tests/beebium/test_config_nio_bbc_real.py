@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from beebium.client.screen import dump_screen, read_mode7_screen
 
 from helpers import command, wait_for_screen_text
@@ -59,6 +61,44 @@ def assert_slots_page_clean(screen: str) -> None:
     assert "Slots" in screen
     assert "fujinet.diller.org" not in screen
     assert "fujinet.online" not in screen
+
+
+def test_config_nio_bbc_cli_escape_prints_escape(beebium_config_nio):
+    """Control case: Escape at the normal CLI must print ``Escape``."""
+    bbc = beebium_config_nio
+
+    tap_matrix(bbc, 7, 0, hold=0.5)
+    time.sleep(0.5)
+    screen = dump_screen(bbc)
+    assert "Escape" in screen, screen
+
+
+def test_config_nio_bbc_escape_after_transient_fls_prints_escape(beebium_config_nio):
+    """A non-CONFNIO transient utility must also restore CLI Escape handling."""
+    bbc = beebium_config_nio
+
+    command(bbc, "*FLS")
+    tap_matrix(bbc, 7, 0, hold=0.5)
+    time.sleep(0.5)
+    screen = dump_screen(bbc)
+    assert "Escape" in screen, screen
+
+
+def test_config_nio_bbc_escape_after_cc65_keycode_prints_escape(beebium_config_nio):
+    """The small C/CC65 KEYCODE transient must restore CLI Escape handling."""
+    bbc = beebium_config_nio
+
+    type_text(bbc, "*KEYCODE\r")
+    wait_for_screen_text(bbc, "KEYCODE")
+    # Drive the physical key long enough for MOS keyboard scanning.  The
+    # type-ahead path is reliable for CLI text but can be consumed before a
+    # transient program's cgetc() poll sees it.
+    tap_matrix(bbc, 1, 0, hold=0.5)
+    time.sleep(1.0)
+    tap_matrix(bbc, 7, 0, hold=0.5)
+    time.sleep(1.0)
+    screen = dump_screen(bbc)
+    assert "Escape" in screen, screen
 
 
 def test_config_nio_bbc_browse_assign_mount_real_fujinet(
@@ -200,6 +240,39 @@ def test_config_nio_bbc_shows_fboot_runtime_mount(
     assert len(mappings) == 0 or mappings[0] == 1
     if mappings:
         assert mappings[7:9] == b"\x00\x00"  # drive 3 remains catalogue-unassigned
+
+
+@pytest.mark.parametrize("exit_key", ("Q", "M"))
+def test_config_nio_bbc_escape_after_exit_returns_cleanly_to_cli(
+    beebium_config_nio, screen_evidence, exit_key
+):
+    """The application must not leave its Escape handling active after exit."""
+    bbc = beebium_config_nio
+
+    type_text(bbc, "*CONFNIO\r")
+    wait_for_screen_text(bbc, "sd0:/", evidence=screen_evidence, label="config-nio")
+
+    # Use matrix timing here so the exit key is definitely consumed by the
+    # application's cgetc(), rather than merely remaining in type-ahead.
+    if exit_key == "Q":
+        tap_matrix(bbc, 1, 0)
+    else:
+        tap_matrix(bbc, 6, 5)
+    time.sleep(1.0)
+    tap_matrix(bbc, 7, 0, hold=0.5)
+    time.sleep(1.0)
+
+    screen = dump_screen(bbc)
+    if screen_evidence is not None:
+        screen_evidence.capture(bbc, "escape after quit")
+    assert "CONFNIO" not in screen
+    assert "HOSTS" not in screen
+    assert "BROWSE" not in screen
+    assert "SLOTS" not in screen
+    assert "Bad program" not in screen
+    assert "Escape" in screen, screen
+    rows = read_mode7_screen(bbc)
+    assert any(row.strip() == ">" for row in rows), screen
 
 
 def test_config_nio_bbc_does_not_reuse_stale_uri_for_unmounted_drive(
