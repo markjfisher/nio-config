@@ -61,6 +61,12 @@ $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_SRCS += $(call rwildcard,
 $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_ASM_SRCS += $(call rwildcard,$(dir)/,*.s)))
 CONFIG_NIO_SRCS := $(foreach src,$(CONFIG_NIO_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
 CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
+# Both BBC targets use the smaller assembly mapping-mount wrapper.  Master
+# shares the same BBC state API; its XRAM table selection does not change this
+# wrapper's interface or storage requirements.
+ifneq ($(filter $(TARGET),bbc master),)
+CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/config_nio_state_bbc.c,$(CONFIG_NIO_SRCS))
+endif
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))
 DEPENDS := $(SUPPORT_OBJS:.o=.d) $(CONFIG_NIO_OBJS:.o=.d)
@@ -115,7 +121,7 @@ $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 
 $(OBJ_DIR)/%.o: %.s | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
-	ca65 -t $(TOOLCHAIN_TARGET) $(ASMFLAGS) -I /home/markf/dev/nio/fujinet-nio-workspace/repos/cc65/libsrc/bbc -o $@ $<
+	ca65 -t $(TOOLCHAIN_TARGET) $(ASMFLAGS) --listing $(@:.o=.lst) -I /home/markf/dev/nio/fujinet-nio-workspace/repos/cc65/libsrc/bbc -o $@ $<
 
 $(BIN_DIR)/keycode$(PROGRAM_EXT): $(OBJ_DIR)/$(SRC_DIR)/support/keycode.o | $(BIN_DIR)
 	$(call link_program)
