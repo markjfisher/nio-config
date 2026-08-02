@@ -37,7 +37,12 @@
 .import _current_screen
 
 .include "config_nio_layout.inc"
-.include "constants.inc"
+.include "bbc_keycodes.inc"
+.include "config_nio_host_table.inc"
+
+BBC_HOST_PAGE_ROWS   = CONFIG_NIO_BBC_HOSTS_ROWS_COUNT
+LAST_HOST_PAGE_START = ((CONFIG_NIO_BBC_HOST_MAX - 1) / BBC_HOST_PAGE_ROWS) * BBC_HOST_PAGE_ROWS
+SCREEN_BROWSE        = 1
 
 ; ---------------------------------------------------------------------------
 ; External BBC config_nio_state_t offsets
@@ -137,7 +142,7 @@ host_up:
 
 host_down:
         lda     _selected_host
-        cmp     #CONFIG_NIO_MAX_HOSTS - 1
+        cmp     #CONFIG_NIO_BBC_HOST_MAX - 1
         jcs     return_false
 
         sta     old_host

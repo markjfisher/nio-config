@@ -497,6 +497,27 @@ def test_config_nio_bbc_large_directory_renders_real_fujinet(beebium_config_nio,
     type_text(bbc, "*CONFNIO\r")
     wait_for_screen_text(bbc, "sd0:/")
 
+    # Exercise the second host page, then return to the first. Page size comes
+    # from the ten rows in the generated BBC layout.
+    tap_matrix(bbc, *ARROW_RIGHT)
+    time.sleep(0.5)
+    rows = read_mode7_screen(bbc)
+    assert "10" in rows[7], rows[7]
+    assert "15" in rows[12], rows[12]
+    tap_matrix(bbc, *ARROW_LEFT)
+    time.sleep(0.5)
+    rows = read_mode7_screen(bbc)
+    assert "sd0:/" in rows[7], rows[7]
+
+    # Delete host 1 and prove host 2 was compacted into its place before
+    # continuing with the normal edit/browse flow.
+    tap_matrix(bbc, *ARROW_DOWN)
+    press_key(bbc, "D", wait=0.5)
+    rows = read_mode7_screen(bbc)
+    assert "fujinet.online" in rows[8], rows[8]
+    assert "fujinet.diller.org" not in dump_screen(bbc)
+    press_key(bbc, "W")
+
     press_key(bbc, "E")
     type_text(bbc, "\x7f\x7f\x7f\x7f\x7fhost:/\r")
     wait_for_screen_text(bbc, "host:/", evidence=screen_evidence, label="large hosts edited")
@@ -514,3 +535,22 @@ def test_config_nio_bbc_large_directory_renders_real_fujinet(beebium_config_nio,
     )
     assert "fs.ssd" in screen
     assert "fstest.ssd" in screen
+
+    # Fetch the next directory page, then return through the page stack.
+    tap_matrix(bbc, *ARROW_RIGHT)
+    next_screen = wait_for_screen_text(
+        bbc,
+        "impetus`mode7.ssd",
+        evidence=screen_evidence,
+        label="large browse next page",
+    )
+    assert "basic2.ssd" not in next_screen
+    tap_matrix(bbc, *ARROW_LEFT)
+    previous_screen = wait_for_screen_text(
+        bbc,
+        "basic2.ssd",
+        evidence=screen_evidence,
+        label="large browse previous page",
+    )
+    assert "fs.ssd" in previous_screen
+    assert "fstest.ssd" in previous_screen

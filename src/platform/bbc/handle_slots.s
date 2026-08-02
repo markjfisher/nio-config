@@ -46,7 +46,7 @@
 
 
 .include "config_nio_layout.inc"
-.include "constants.inc"
+.include "bbc_keycodes.inc"
 
 ; ---------------------------------------------------------------------------
 ; config_nio_state_t offsets, external BBC state model

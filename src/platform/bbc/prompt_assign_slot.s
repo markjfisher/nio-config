@@ -21,7 +21,7 @@
         .importzp ptr1
 
         .include "config_nio_layout.inc"
-        .include "constants.inc"
+        .include "bbc_keycodes.inc"
 
 STATE_SLOT_START = 1
 SLOT_URI         = 1

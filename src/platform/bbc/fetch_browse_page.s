@@ -41,7 +41,7 @@
 .import _selected_entry
 
 .include "config_nio_layout.inc"
-.include "constants.inc"
+.include "config_nio_host_table.inc"
 
 ; ---------------------------------------------------------------------------
 ; External BBC config_nio_state_t offsets
@@ -59,6 +59,8 @@ STATE_BROWSE_PATH       = 9
 ; This should already be provided by the generated/layout include used by the
 ; BBC assembly build. Defining the alias here mirrors the C source.
 BBC_BROWSE_PAGE_ROWS    = CONFIG_NIO_BBC_BROWSE_ROWS_COUNT
+BBC_EDIT_BUF_SIZE       = CONFIG_NIO_BBC_HOST_SIZE
+BBC_URI_WORK_MAX        = 129
 
 
 .segment "CODE"

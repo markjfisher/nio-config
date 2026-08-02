@@ -20,6 +20,7 @@
         .importzp ptr1
 
         .include "config_nio_layout.inc"
+        .include "config_nio_host_table.inc"
 
 STATE_ENTRY_COUNT = 5
 STATE_BROWSE_PATH = 9
@@ -28,7 +29,7 @@ ENTRY_IS_DIR = 0
 ENTRY_NAME   = 1
 ENTRY_FLAG_DIR = $01
 
-BBC_EDIT_BUF_SIZE = 97
+BBC_EDIT_BUF_SIZE = CONFIG_NIO_BBC_HOST_SIZE
 
         .code
 

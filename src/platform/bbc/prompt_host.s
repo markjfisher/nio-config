@@ -30,7 +30,9 @@
 .import _config_nio_bbc_edit_width
 
 .include "config_nio_layout.inc"
-.include "constants.inc"
+.include "config_nio_host_table.inc"
+
+BBC_EDIT_BUF_SIZE = CONFIG_NIO_BBC_HOST_SIZE
 
 BBC_HOST_TEXT_X         := CONFIG_NIO_BBC_HOSTS_ROWS_X + 4
 

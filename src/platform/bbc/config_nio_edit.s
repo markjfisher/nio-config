@@ -11,7 +11,7 @@
         .importzp ptr1
 
         .include "oslib/os.inc"
-        .include "constants.inc"
+        .include "bbc_keycodes.inc"
 
         .bss
 _config_nio_bbc_edit_buf:

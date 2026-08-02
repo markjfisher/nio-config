@@ -35,7 +35,12 @@
 .import _uri_buf
 
 
-.include "constants.inc"
+NIO_DEVICE_DISK               = $FC
+NIO_DISK_LIST_MOUNTS          = $0D
+NIO_DISK_LIST_MOUNTS_HEADER   = 10
+BBC_MOUNTS_PAYLOAD            = 240
+NIO_DISK_LIST_MOUNTS_RESPONSE = BBC_MOUNTS_PAYLOAD + NIO_DISK_LIST_MOUNTS_HEADER
+BBC_RUNTIME_NAME_WIDTH        = 19
 
 ; ---------------------------------------------------------------------------
 ; Protocol offsets

@@ -36,7 +36,11 @@
 .import _assign_slot_start
 .import _slots_focus
 
-.include "constants.inc"
+.include "bbc_keycodes.inc"
+
+SCREEN_HOSTS  = 0
+SCREEN_BROWSE = 1
+SCREEN_SLOTS  = 2
 
 .segment "CODE"
 

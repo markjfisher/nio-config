@@ -1,7 +1,7 @@
 .export  _key_is_next_page
 .export  _key_is_previous_page
 
-.include "constants.inc"
+.include "bbc_keycodes.inc"
 
 ; uint8_t key_is_next_page(char key)
 ;

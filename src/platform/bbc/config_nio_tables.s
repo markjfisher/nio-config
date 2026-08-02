@@ -23,14 +23,16 @@
 .endif
         .importzp ptr1, ptr2, tmp1, tmp2, tmp3, tmp4
 
+        .include "config_nio_host_table.inc"
+
 XRAM_BANK       = 7
 XRAM_BASE_HI    = $80
 
-HOST_MAX        = 16
 ; Host entries are roots, while composed file URIs use the separate 160-byte
 ; browse buffer.  Capping roots at 96 characters releases 512 bytes for the
 ; cc65 software stack on an unexpanded BBC.
-HOST_SIZE       = $61
+HOST_MAX        = CONFIG_NIO_BBC_HOST_MAX
+HOST_SIZE       = CONFIG_NIO_BBC_HOST_SIZE
 
 SLOT_VISIBLE_MAX = 8
 SLOT_MAX        = 16
