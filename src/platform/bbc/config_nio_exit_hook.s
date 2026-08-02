@@ -7,12 +7,18 @@
         .export bbc_exit_hook
 
         .import OSBYTE
+        .import _clrscr
 
         .include "oslib/os.inc"
 
         .code
 
 bbc_exit_hook:
+        ; CONFNIO owns the full-screen interface, so clear it before handing
+        ; control to a freshly initialised language instance. This must remain
+        ; application-specific: ordinary BBC executables retain their output.
+        jsr     _clrscr
+
         ; OSBYTE 252 reads the current language ROM number when X=0, Y=$FF.
         lda     #$FC
         ldx     #$00
