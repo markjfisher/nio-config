@@ -66,6 +66,7 @@ CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /s
 # wrapper's interface or storage requirements.
 ifneq ($(filter $(TARGET),bbc master),)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/config_nio_state_bbc.c,$(CONFIG_NIO_SRCS))
+CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/bbc_oscli.s,$(CONFIG_NIO_ASM_SRCS))
 endif
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))

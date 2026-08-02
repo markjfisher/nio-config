@@ -450,6 +450,11 @@ def test_config_nio_bbc_shows_cli_mapping_and_canonical_slot_uri(
     assert mappings[0] == 1
     assert mappings[3:5] == bytes((1, 100))  # drive 1: valid/RW, slot 100
 
+    # Replace the live disk without changing the persisted catalogue mapping.
+    # Mount+exit below must therefore reconstruct and execute "FMOUNT 100 1",
+    # rather than merely leaving the earlier CLI mount in place.
+    command(bbc, "*FBOOT 1")
+
     type_text(bbc, "*CONFNIO\r")
     wait_for_screen_text(bbc, "sd0:/")
     press_key(bbc, "S", wait=0.5)
@@ -468,7 +473,14 @@ def test_config_nio_bbc_shows_cli_mapping_and_canonical_slot_uri(
     # untouched, exactly as an empty drive row does.
     assert drive1[-2:] == drive2[-2:], (drive1, drive2)
 
-    press_key(bbc, "Q", wait=0.5)
+    mount_calls = real_fujinet_config_nio.log_text().count("dev=0xFC cmd=0x01")
+    press_key(bbc, "M", wait=1.0)
+    assert real_fujinet_config_nio.log_text().count("dev=0xFC cmd=0x01") > mount_calls
+    command(bbc, "*. :1")
+    wait_for_screen_text(
+        bbc, "HELLO", evidence=screen_evidence, label="three-digit mapping remounted"
+    )
+
     command(bbc, "*FUMOUNT 1")
     mappings = (appstore / "mappings.bin").read_bytes()
     assert mappings[3:5] == b"\x00\x00"
