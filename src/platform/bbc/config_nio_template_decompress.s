@@ -1,6 +1,8 @@
-        .export _config_nio_bbc_decompress_template
+.export _config_nio_bbc_decompress_template
+.export _config_nio_bbc_decompress_template_body
 
-        .importzp ptr1, ptr2, tmp1
+.importzp ptr1, ptr2, tmp1
+.include "config_nio_layout.inc"
 
 SCREEN_BASE = $7C00
 
@@ -14,6 +16,18 @@ _config_nio_bbc_decompress_template:
         sta     ptr2
         lda     #>SCREEN_BASE
         sta     ptr2+1
+        jmp     decompress
+
+; void __fastcall__ config_nio_bbc_decompress_template_body(const uint8_t *src)
+_config_nio_bbc_decompress_template_body:
+        sta     ptr1
+        stx     ptr1+1
+        lda     #<(SCREEN_BASE + CONFIG_NIO_BBC_TEMPLATE_HEADER_BYTES)
+        sta     ptr2
+        lda     #>(SCREEN_BASE + CONFIG_NIO_BBC_TEMPLATE_HEADER_BYTES)
+        sta     ptr2+1
+
+decompress:
         ldx     #$00
 
 next_token:

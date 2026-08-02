@@ -1,10 +1,12 @@
 #include <stdint.h>
 
+extern const uint8_t config_nio_tpl_header[];
 extern const uint8_t config_nio_tpl_hosts[];
 extern const uint8_t config_nio_tpl_browse[];
 extern const uint8_t config_nio_tpl_slots[];
 
 void __fastcall__ config_nio_bbc_decompress_template(const uint8_t *src);
+void __fastcall__ config_nio_bbc_decompress_template_body(const uint8_t *src);
 
 void config_nio_bbc_load_template(const char *asset_name)
 {
@@ -17,5 +19,6 @@ void config_nio_bbc_load_template(const char *asset_name)
   else
     src = config_nio_tpl_slots;
 
-  config_nio_bbc_decompress_template(src);
+  config_nio_bbc_decompress_template(config_nio_tpl_header);
+  config_nio_bbc_decompress_template_body(src);
 }

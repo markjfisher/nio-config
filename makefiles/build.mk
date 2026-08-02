@@ -81,6 +81,7 @@ $(CONFIG_NIO_BBC_GENERATED): $(CONFIG_NIO_BBC_TEMPLATE_INPUTS)
 	python3 bbc/scripts/generate_config_nio_templates.py
 
 $(OBJ_DIR)/$(SRC_DIR)/platform/$(PLATFORM)/config_nio_template_data.o: $(CONFIG_NIO_BBC_GENERATED)
+$(OBJ_DIR)/$(SRC_DIR)/platform/$(PLATFORM)/config_nio_template_decompress.o: $(CONFIG_NIO_BBC_GENERATED)
 $(OBJ_DIR)/$(SRC_DIR)/platform/$(PLATFORM)/config_nio_ui.o: $(SRC_DIR)/platform/$(PLATFORM)/config_nio_layout.h
 endif
 

@@ -6,6 +6,7 @@ The template generator consumes this layout and emits:
 
 - `src/platform/bbc/config_nio_template_data.s`: compressed table data linked into `CONFNIO`.
 - `src/platform/bbc/config_nio_layout.h`: C macros used by the BBC UI overlay code.
+- `src/platform/bbc/config_nio_layout.inc`: assembler layout constants, including the shared template header size.
 
 The source template binaries live in `bbc/assets/config-nio-templates/`:
 
@@ -20,6 +21,8 @@ python3 bbc/scripts/generate_config_nio_templates.py
 ```
 
 Each template must be exactly 1000 bytes, laid out as 40 columns by 25 rows. These files are source assets only; they are not copied to the generated SSDs because `CONFNIO` uses the embedded compressed table.
+
+The generator takes the first four lines (160 bytes) from `CNHOSTS`, verifies that the same bytes occur at the start of `CNBROW` and `CNSLOTS`, and stores that common header once. The remaining 21 lines of each screen are stored as separate compressed bodies. When a screen is painted, `CONFNIO` decompresses the shared header followed by the selected body. Change the `--header-lines` argument only when all three artwork files have the same corresponding prefix.
 
 When moving a pane in the artwork, update the matching coordinates in `bbc/config_nio_layout.json` and rerun the generator. The C UI includes the generated header, so row and field locations move together without editing the BBC C/ASM files for each field.
 
