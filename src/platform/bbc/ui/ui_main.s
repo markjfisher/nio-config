@@ -37,7 +37,7 @@
 .import _saved_state
 .import load_state
 
-.include "bbc_keycodes.inc"
+.include "../bbc_keycodes.inc"
 
 SCREEN_HOSTS  = 0
 SCREEN_BROWSE = 1

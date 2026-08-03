@@ -2,7 +2,7 @@
 .export _config_nio_bbc_decompress_template_body
 
 .importzp ptr1, ptr2, tmp1
-.include "config_nio_layout.inc"
+.include "../config_nio_layout.inc"
 
 SCREEN_BASE = $7C00
 

@@ -1,49 +1,17 @@
-        .export _config_nio_bbc_edit_buf
-        .export _config_nio_bbc_edit_cap
-        .export _config_nio_bbc_edit_x
-        .export _config_nio_bbc_edit_y
-        .export _config_nio_bbc_edit_width
         .export _config_nio_bbc_edit_line
 
         .import _cgetc
         .import _cursor
         .import _config_nio_bbc_cursor
+        .import edit_len, edit_pos, edit_max, edit_start, edit_key
+        .import edit_ch, edit_dst, edit_col, edit_src, edit_cursor_x
+        .import _config_nio_bbc_edit_buf, _config_nio_bbc_edit_cap
+        .import _config_nio_bbc_edit_x, _config_nio_bbc_edit_y
+        .import _config_nio_bbc_edit_width
         .importzp ptr1
 
         .include "oslib/os.inc"
-        .include "bbc_keycodes.inc"
-
-        .bss
-_config_nio_bbc_edit_buf:
-        .res    2
-_config_nio_bbc_edit_cap:
-        .res    1
-_config_nio_bbc_edit_x:
-        .res    1
-_config_nio_bbc_edit_y:
-        .res    1
-_config_nio_bbc_edit_width:
-        .res    1
-edit_len:
-        .res    1
-edit_pos:
-        .res    1
-edit_max:
-        .res    1
-edit_start:
-        .res    1
-edit_key:
-        .res    1
-edit_ch:
-        .res    1
-edit_dst:
-        .res    1
-edit_col:
-        .res    1
-edit_src:
-        .res    1
-edit_cursor_x:
-        .res    1
+        .include "../bbc_keycodes.inc"
 
         .code
 

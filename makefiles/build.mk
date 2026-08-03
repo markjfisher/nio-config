@@ -42,7 +42,7 @@ else
 $(error Unknown compiler family '$(COMPILER_FAMILY)' for TARGET=$(TARGET))
 endif
 
-rwildcard=$(wildcard $(1)$(2))$(foreach d,$(wildcard $(1)*),$(call rwildcard,$d/,$(2)))
+rwildcard=$(wildcard $(1)$(2)) $(foreach d,$(wildcard $(1)*),$(call rwildcard,$d/,$(2)))
 
 CONFIG_NIO_EXTRA_SRC_DIRS_msdos := $(SRC_DIR)/platform/portable
 CONFIG_NIO_EXTRA_SRC_DIRS_atari := $(SRC_DIR)/platform/portable

@@ -8,6 +8,7 @@
 .import  _draw_drive_rows
 .import  _draw_slot_rows
 .import  _saved_state
+.import  slots_template
 
 .importzp ptr1
 
@@ -37,8 +38,8 @@ restore_saved_state_ptr:
 
 ; void draw_slots(config_nio_state_t *state)
 _draw_slots:
-        lda     #<slots_file
-        ldx     #>slots_file
+        lda     #<slots_template
+        ldx     #>slots_template
         jsr     _config_nio_bbc_load_template
 
         jsr     load_state
@@ -46,6 +47,3 @@ _draw_slots:
 
         jsr     load_state
         jmp     _draw_drive_rows
-
-.data
-slots_file:     .byte "CNSLOTS", 0
