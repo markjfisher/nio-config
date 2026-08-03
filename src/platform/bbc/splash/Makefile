@@ -10,7 +10,9 @@ STAGE_DIR := $(BUILD_DIR)/stage
 CA65 ?= ca65
 LD65 ?= ld65
 PYTHON ?= python3
+SCREEN_PYTHON ?= uv run --with Pillow python3
 CREATE_SSD ?= $(REPO_ROOT)/../fujinet-nio-lib/scripts/create_ssd.py
+SCREEN_INPUT ?=
 
 PROGRAM := $(BUILD_DIR)/SPLASH
 OBJECT := $(OBJ_DIR)/main.o
@@ -29,8 +31,8 @@ $(PROGRAM): $(OBJECT) $(SPLASH_DIR)/splash.cfg
 	@mkdir -p "$(dir $@)"
 	$(LD65) -C "$(SPLASH_DIR)/splash.cfg" -m "$(BUILD_DIR)/splash.map" -o "$@" "$<"
 
-$(SCREEN): $(SPLASH_DIR)/screen_gen.py
-	$(PYTHON) "$<" --output "$@"
+$(SCREEN): $(SPLASH_DIR)/screen_gen.py $(SCREEN_INPUT)
+	$(SCREEN_PYTHON) "$<" $(if $(SCREEN_INPUT),--input "$(SCREEN_INPUT)",) --output "$@"
 
 check: $(PROGRAM) $(SCREEN)
 	@test "$$(wc -c < "$(SCREEN)")" -eq 3840

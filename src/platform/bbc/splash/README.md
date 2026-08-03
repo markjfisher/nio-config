@@ -1,7 +1,7 @@
 # BBC shortened-screen splash proof of concept
 
-This directory contains a standalone 6502 splash application and a generated
-test image. It is intentionally separate from the main `config-nio` link: the
+This directory contains a standalone 6502 splash application and BBC Mode 5
+screen-data tooling. It is intentionally separate from the main `config-nio` link: the
 eventual loader must remain small, display the splash, load `CONFNIO` at
 `&1900`, and transfer control to it.
 
@@ -26,6 +26,25 @@ Build the program and generated image:
 
 ```sh
 make -C src/platform/bbc/splash
+```
+
+The screen generator can convert the supplied four-level grayscale PNG into
+BBC Mode 5 screen memory. The converter is run with `uv run --with Pillow` and
+validates the
+image as exactly 160x96 with four grayscale levels, mapping the ordered levels
+from black to white onto logical colours 0 through 3:
+
+```sh
+uv run --with Pillow python3 src/platform/bbc/splash/screen_gen.py \
+  --input images/fujinet-config-nio-splash-160x96x4.png \
+  --output build/bbc/splash/SCREEN
+```
+
+To build the disk image with that PNG as `SCREEN`:
+
+```sh
+make -C src/platform/bbc/splash clean disk \
+  SCREEN_INPUT="$PWD/images/fujinet-config-nio-splash-160x96x4.png"
 ```
 
 Build a standalone DFS image containing `SPLASH` and `SCREEN`:

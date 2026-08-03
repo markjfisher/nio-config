@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import time
@@ -19,6 +20,10 @@ _HERE = Path(__file__).resolve()
 _NIO_CONFIG_ROOT = _HERE.parents[2]
 _SPLASH_DIR = _NIO_CONFIG_ROOT / "src" / "platform" / "bbc" / "splash"
 _SPLASH_BUILD = _NIO_CONFIG_ROOT / "build" / "bbc" / "splash"
+_DEFAULT_SPLASH_IMAGE = (
+    _NIO_CONFIG_ROOT / "images" / "fujinet-config-nio-splash-160x96x4.png"
+)
+_SPLASH_IMAGE = Path(os.environ.get("SPLASH_IMAGE", _DEFAULT_SPLASH_IMAGE))
 
 
 def type_text(bbc, text: str) -> None:
@@ -53,7 +58,17 @@ def wait_for_screen_bytes(bbc, expected: bytes, timeout: float = 5.0) -> None:
 
 @pytest.fixture(scope="session")
 def splash_bbc_artifacts():
-    subprocess.run(["make", "-C", str(_SPLASH_DIR), "disk"], check=True)
+    subprocess.run(
+        [
+            "make",
+            "-C",
+            str(_SPLASH_DIR),
+            "clean",
+            "disk",
+            f"SCREEN_INPUT={_SPLASH_IMAGE}",
+        ],
+        check=True,
+    )
     screen = _SPLASH_BUILD / "SCREEN"
     disk = _SPLASH_BUILD / "splash.ssd"
     assert screen.stat().st_size == SCREEN_SIZE
@@ -88,7 +103,8 @@ def test_bbc_splash_loads_short_mode5_screen_and_restores_mode7(
     assert tuple(crtc.registers[:14]) == SPLASH_CRTC_REGISTERS
 
     ula = bbc.video_ula.state
-    assert ula.control == 0xC4
+    # MOS cursor flashing toggles the low control bit while retaining Mode 5.
+    assert ula.control in (0xC4, 0xC5)
     assert ula.teletext_mode is False
     assert tuple(ula.palette[i] for i in (0, 1, 3, 7, 9, 12, 15)) == (
         0,
@@ -103,13 +119,25 @@ def test_bbc_splash_loads_short_mode5_screen_and_restores_mode7(
     frame = bbc.video.capture_frame()
     assert (frame.width, frame.height) == (160, 96)
     colours = {frame.pixels[i : i + 4] for i in range(0, len(frame.pixels), 4)}
-    assert len(colours) >= 4
+    if _SPLASH_IMAGE == _DEFAULT_SPLASH_IMAGE:
+        assert len(colours) >= 4
     if screen_evidence is not None:
         screen_evidence.note(
             "splash CRTC: 40x12 character rows, 8 rasters, start=&0E20; "
             "SCREEN matched all 3840 bytes at &7100"
         )
         screen_evidence.capture(bbc, "shortened Mode 5 splash")
+
+    # MOS's IRQ cursor-flash path used to overwrite the custom ULA control
+    # value after the application had been running for a while.
+    time.sleep(5.0)
+    persistent_frame = bbc.video.capture_frame()
+    persistent_colours = {
+        persistent_frame.pixels[i : i + 4]
+        for i in range(0, len(persistent_frame.pixels), 4)
+    }
+    if _SPLASH_IMAGE == _DEFAULT_SPLASH_IMAGE:
+        assert len(persistent_colours) >= 4
 
     type_text(bbc, " ")
     wait_for_screen_text(bbc, ">", evidence=screen_evidence, label="MODE 7 restored")

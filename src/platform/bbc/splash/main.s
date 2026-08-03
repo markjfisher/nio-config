@@ -23,9 +23,10 @@
 ; ---------------------------------------------------------------------------
 
 OSWRCH  = $FFEE
-OSRDCH  = $FFE0
 OSBYTE  = $FFF4
 OSCLI   = $FFF7
+
+OSBYTE_READ_KEY = 129
 
 ; ---------------------------------------------------------------------------
 ; Hardware
@@ -36,6 +37,7 @@ CRTC_DATA = $FE01
 
 ULA_CTRL  = $FE20
 ULA_PAL   = $FE21
+ULA_CTRL_SHADOW = $0248
 
 ; ---------------------------------------------------------------------------
 ; Custom screen layout
@@ -118,10 +120,17 @@ _start:
 
         jsr set_video
 
-        ; Wait for a new key without making any further MOS display calls. The
-        ; custom CRTC and ULA state therefore remains active for the whole
-        ; time the splash is visible.
-        jsr OSRDCH
+        ; Poll for a new key instead of calling blocking OSRDCH. OSRDCH enters
+        ; the MOS input wait path, which assumes that MOS owns the display and
+        ; can clear/redraw through the active screen geometry. OSBYTE 129 with
+        ; a zero timeout only checks the keyboard buffer and returns carry set
+        ; when no key is available, leaving the custom display untouched.
+@wait_key:
+        lda #OSBYTE_READ_KEY
+        ldx #0                  ; no wait: poll only
+        ldy #0
+        jsr OSBYTE
+        bcs @wait_key
 
         ;
         ; Restore a conventional MOS-controlled screen before returning.
@@ -139,6 +148,9 @@ _start:
 ; ---------------------------------------------------------------------------
 
 set_video:
+        php
+        sei
+
         ; Palette byte:
         ;   high nibble = logical palette index
         ;   low bits    = physical colour EOR 7
@@ -161,10 +173,16 @@ set_video:
         bne @set_crtc
 
         lda #$C4                 ; standard Mode 5 ULA control value
+        sta ULA_CTRL_SHADOW     ; keep MOS IRQ cursor flashing in this mode
         sta ULA_CTRL
+
+        plp
         rts
 
 set_video_blank:
+        php
+        sei
+
         ldx #0
 @set_black_palette:
         lda black_palette,x
@@ -183,7 +201,10 @@ set_video_blank:
         bne @set_crtc
 
         lda #$C4
+        sta ULA_CTRL_SHADOW
         sta ULA_CTRL
+
+        plp
         rts
 
 ; ---------------------------------------------------------------------------
