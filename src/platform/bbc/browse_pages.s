@@ -11,6 +11,7 @@
         .import _browse_page_depth
         .import _selected_entry
         .import return0, return1
+        .import load_state, restore_saved_state_ptr
         .importzp ptr1
 
 STATE_ENTRY_COUNT    = 5
@@ -20,9 +21,6 @@ BBC_BROWSE_PAGE_STACK = 6
 
 ; int fetch_next_browse_page(config_nio_state_t *state)
 _fetch_next_browse_page:
-        sta     saved_state
-        stx     saved_state+1
-
         lda     _browse_more
         bne     :+
         jmp     return0
@@ -67,9 +65,6 @@ next_failed:
 
 ; int fetch_previous_browse_page(config_nio_state_t *state)
 _fetch_previous_browse_page:
-        sta     saved_state
-        stx     saved_state+1
-
         lda     _browse_page_depth
         beq     previous_first
         dec     _browse_page_depth
@@ -92,7 +87,7 @@ fetch_previous:
         jsr     _fetch_browse_page
         cmp     #0
         beq     previous_done
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_ENTRY_COUNT
         lda     (ptr1),y
         beq     previous_done
@@ -103,18 +98,5 @@ previous_done:
         ; The C API deliberately reports redraw even when the fetch failed.
         jmp     return1
 
-load_state:
-        lda     saved_state
-        ldx     saved_state+1
-        rts
-
-restore_state_ptr:
-        lda     saved_state
-        sta     ptr1
-        lda     saved_state+1
-        sta     ptr1+1
-        rts
-
         .bss
-saved_state: .res 2
 old_start:   .res 2

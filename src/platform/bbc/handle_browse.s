@@ -15,7 +15,6 @@
 
 .export _handle_browse
 
-.importzp c_sp
 .importzp ptr1
 
 .import pusha
@@ -33,6 +32,7 @@
 .import _fetch_next_browse_page
 .import _fetch_previous_browse_page
 .import _assign_selected_file
+.import load_state, restore_saved_state_ptr
 
 .import _selected_entry
 .import _browse_start
@@ -71,14 +71,6 @@ ENTRY_FLAG_NAME_TRUNCATED = $80
 
 _handle_browse:
         sta     saved_key
-
-        ; Save state independently of the changing C software stack.
-        ldy     #1
-        lda     (c_sp),y
-        sta     saved_state+1
-        dey
-        lda     (c_sp),y
-        sta     saved_state
 
         ; Cursor codes must be tested before ASCII case folding.
         lda     saved_key
@@ -162,7 +154,7 @@ browse_down:
         ;
         ;   selected_entry + 1 < state->entry_count
         ;
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         lda     _selected_entry
         clc
@@ -204,7 +196,7 @@ browse_next:
         jeq     return_false
 
 call_next_page:
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _fetch_next_browse_page
 
         ; Return the helper's Boolean result directly after removing state.
@@ -217,7 +209,7 @@ browse_previous:
         jeq     return_false
 
 call_previous_page:
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _fetch_previous_browse_page
 
         ; Return the helper's Boolean result directly.
@@ -242,7 +234,7 @@ browse_parent:
         sta     _browse_page_depth
 
         ; The original ignores the fetch result and returns redraw=1.
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _fetch_browse_page
 
         jmp     return_true
@@ -253,7 +245,7 @@ browse_parent:
 ; ===========================================================================
 
 browse_assign:
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _assign_selected_file
 
         ; assign_selected_file() returns void; the UI always redraws.
@@ -266,7 +258,7 @@ browse_assign:
 
 browse_enter:
         ; Nothing can be selected when entry_count is zero.
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_ENTRY_COUNT
         lda     (ptr1),y
         jeq     return_false
@@ -312,40 +304,20 @@ browse_enter:
         sta     _browse_start+1
         sta     _browse_page_depth
 
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _fetch_browse_page
 
         jmp     return_true
 
 
-; ===========================================================================
-; State helpers
-; ===========================================================================
-
-; Restore saved_state into zero-page ptr1.
-restore_state_ptr:
-        lda     saved_state
-        sta     ptr1
-        lda     saved_state+1
-        sta     ptr1+1
-        rts
-
-
-; Return state in AX.
-load_state_ax:
-        lda     saved_state
-        ldx     saved_state+1
-        rts
-
-
 ; Return &state->browse_path in AX.
 load_browse_path_ax:
-        lda     saved_state
+        jsr     load_state
         clc
         adc     #STATE_BROWSE_PATH
         sta     browse_path_ptr
 
-        lda     saved_state+1
+        txa
         adc     #0
         tax
 
@@ -402,9 +374,6 @@ return_true:
 ; ===========================================================================
 
 .segment "BSS"
-
-saved_state:
-        .res    2
 
 saved_key:
         .res    1

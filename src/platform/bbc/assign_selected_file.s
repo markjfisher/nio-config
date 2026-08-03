@@ -16,6 +16,7 @@
         .import _config_nio_appstore_buf
         .import _config_nio_store_buf
         .import _uri_buf
+        .import load_state, restore_saved_state_ptr
         .import _selected_entry
         .import _browse_host
         .import pusha, pushax
@@ -37,9 +38,7 @@ BBC_URI_WORK_MAX  = 129
         .code
 
 _assign_selected_file:
-        sta     saved_state
-        stx     saved_state+1
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_ENTRY_COUNT
         lda     (ptr1),y
         jeq     assign_done
@@ -115,26 +114,14 @@ assign_done:
         rts
 
 load_browse_path:
-        lda     saved_state
+        jsr     load_state
         clc
         adc     #STATE_BROWSE_PATH
         pha
-        lda     saved_state+1
+        txa
         adc     #0
         tax
         pla
-        rts
-
-load_state:
-        lda     saved_state
-        ldx     saved_state+1
-        rts
-
-restore_state_ptr:
-        lda     saved_state
-        sta     ptr1
-        lda     saved_state+1
-        sta     ptr1+1
         rts
 
         .rodata
@@ -142,5 +129,4 @@ mode_rw:
         .byte   "rw", 0
 
         .bss
-saved_state: .res 2
 chosen_slot: .res 1

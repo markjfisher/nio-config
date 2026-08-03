@@ -25,10 +25,7 @@
 .importzp ptr1
 .importzp tmp1
 .importzp tmp2
-.importzp c_sp
 
-.import decsp1
-.import incsp1
 .import pusha
 .import pushax
 
@@ -59,15 +56,6 @@ LIST_TEXT           = NIO_DISK_LIST_MOUNTS_HEADER
 
 
 .segment "CODE"
-
-;; Need to implement this:
-; void refresh_runtime_mounts(void)
-; {
-;   uint8_t i;
-; 
-;   for (i = 0; i < BBC_DRIVE_COUNT; i++)
-;     (void) runtime_mount_display(i);
-; }
 
 _refresh_runtime_mounts:
         lda     #$00

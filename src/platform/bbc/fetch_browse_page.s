@@ -39,6 +39,7 @@
 .import _browse_next
 .import _browse_more
 .import _selected_entry
+.import load_state, restore_saved_state_ptr
 
 .include "config_nio_layout.inc"
 .include "config_nio_host_table.inc"
@@ -66,12 +67,9 @@ BBC_URI_WORK_MAX        = 129
 .segment "CODE"
 
 _fetch_browse_page:
-        sta     saved_state
-        stx     saved_state+1
-
         ; state->entry_count = 0
         ; state->entries_truncated = 0
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         lda     #0
 
@@ -170,7 +168,7 @@ _fetch_browse_page:
 
 fetch_loop:
         ; remaining = BBC_BROWSE_PAGE_ROWS - state->entry_count
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         ldy     #STATE_ENTRY_COUNT
         lda     #BBC_BROWSE_PAGE_ROWS
@@ -202,7 +200,7 @@ fetch_loop:
 ;   AX:      more
 ; ---------------------------------------------------------------------------
 
-        jsr     load_state_ax
+        jsr     load_state
         jsr     pushax
 
         lda     #<_uri_buf
@@ -270,7 +268,7 @@ fetch_advanced:
         sta     fetch_start+1
 
         ; Continue while state->entry_count < BBC_BROWSE_PAGE_ROWS.
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         ldy     #STATE_ENTRY_COUNT
         lda     (ptr1),y
@@ -297,33 +295,14 @@ return0:
         rts
 
 
-; ===========================================================================
-; State-pointer helpers
-; ===========================================================================
-
-restore_state_ptr:
-        lda     saved_state
-        sta     ptr1
-
-        lda     saved_state+1
-        sta     ptr1+1
-        rts
-
-
-load_state_ax:
-        lda     saved_state
-        ldx     saved_state+1
-        rts
-
-
 ; Return &state->browse_path in AX.
 load_browse_path_ax:
-        lda     saved_state
+        jsr     load_state
         clc
         adc     #STATE_BROWSE_PATH
         sta     browse_path_low
 
-        lda     saved_state+1
+        txa
         adc     #0
         tax
 
@@ -342,9 +321,6 @@ empty_string:
 ; ===========================================================================
 
 .segment "BSS"
-
-saved_state:
-        .res    2
 
 fetch_start:
         .res    2

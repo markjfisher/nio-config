@@ -5,9 +5,7 @@
 ;   X = high byte of state
 
 .export _config_nio_run
-.export load_state
 
-.importzp c_sp
 .importzp tmp1
 
 .import pushax
@@ -36,6 +34,8 @@
 .import _selected_slot
 .import _assign_slot_start
 .import _slots_focus
+.import _saved_state
+.import load_state
 
 .include "bbc_keycodes.inc"
 
@@ -49,8 +49,9 @@ _config_nio_run:
 
         ; Preserve state for the lifetime of this routine:
         ;
-        ;   c_sp + 0 = state low
-        ;   c_sp + 1 = state high
+        ; Keep one shared copy for every assembly UI routine.
+        sta     _saved_state
+        stx     _saved_state+1
         ;
         jsr     pushax
 
@@ -229,25 +230,6 @@ select_slots:
 ; ---------------------------------------------------------------------------
 ; Internal helpers
 ; ---------------------------------------------------------------------------
-
-; Load the persistent state pointer into AX.
-;
-; Entry:
-;   c_sp + 0 = state low
-;   c_sp + 1 = state high
-;
-; Exit:
-;   A = state low
-;   X = state high
-;
-load_state:
-        ldy     #$01
-        lda     (c_sp),y
-        tax
-        dey
-        lda     (c_sp),y
-        rts
-
 
 ; Push another copy of state as the first argument to a two-argument
 ; fastcall function.

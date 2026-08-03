@@ -15,7 +15,6 @@
 
 .export _handle_hosts
 
-.importzp c_sp
 .importzp ptr1
 
 .import pusha
@@ -28,6 +27,7 @@
 .import _edit_host
 .import _clear_host
 .import _fetch_browse_page
+.import load_state, restore_saved_state_ptr
 
 .import _selected_host
 .import _hosts_start
@@ -55,14 +55,6 @@ STATE_BROWSE_PATH  = 9
 
 _handle_hosts:
         sta     saved_key
-
-        ; Preserve state independently of changes to the C software stack.
-        ldy     #1
-        lda     (c_sp),y
-        sta     saved_state+1
-        dey
-        lda     (c_sp),y
-        sta     saved_state
 
         ; Cursor codes must be checked before ASCII case folding.
         lda     saved_key
@@ -224,7 +216,7 @@ next_page_done:
 ; ===========================================================================
 
 host_edit:
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _edit_host
 
         ; edit_host() returns void; this handler always requests a redraw.
@@ -236,7 +228,7 @@ host_edit:
 ; ===========================================================================
 
 host_clear:
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _clear_host
 
         ; clear_host() returns void; this handler always requests a redraw.
@@ -248,7 +240,7 @@ host_clear:
 ; ===========================================================================
 
 host_enter:
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         ; Only configured hosts may be opened.
         lda     _selected_host
@@ -270,7 +262,7 @@ host_enter:
         ; reset_browse_pages()
         sta     _browse_page_depth
 
-        jsr     load_state_ax
+        jsr     load_state
         jsr     _fetch_browse_page
 
         cmp     #0
@@ -286,26 +278,6 @@ browse_fetch_failed:
         jsr     _cgetc
 
         jmp     return_true
-
-
-; ===========================================================================
-; State helpers
-; ===========================================================================
-
-; Restore saved state into zero-page ptr1.
-restore_state_ptr:
-        lda     saved_state
-        sta     ptr1
-        lda     saved_state+1
-        sta     ptr1+1
-        rts
-
-
-; Return state in AX.
-load_state_ax:
-        lda     saved_state
-        ldx     saved_state+1
-        rts
 
 
 ; ===========================================================================
@@ -362,9 +334,6 @@ return_true:
 ; ===========================================================================
 
 .segment "BSS"
-
-saved_state:
-        .res    2
 
 saved_key:
         .res    1

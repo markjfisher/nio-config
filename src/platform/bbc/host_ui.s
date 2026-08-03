@@ -15,6 +15,7 @@
         .import _config_nio_save_hosts
         .import _config_nio_store_buf
         .import _prompt_host
+        .import load_state, restore_saved_state_ptr
         .import _selected_host
         .import _hosts_start
         .import pusha, pushax
@@ -30,11 +31,9 @@ BBC_HOST_ROW_WIDTH = CONFIG_NIO_BBC_HOSTS_ROWS_URI_WIDTH + 4
 
         .code
 
-; void show_hosts(config_nio_state_t *state)
+; void show_hosts()
+; NOTE: state is now managed directly in uint16_t saved_state, so not a param
 _show_hosts:
-        sta     saved_state
-        stx     saved_state+1
-
         lda     _selected_host
         cmp     _hosts_start
         bcc     select_host_page
@@ -54,7 +53,7 @@ store_host_page:
         sta     _hosts_start
 
 host_page_ready:
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_HOST_COUNT
         lda     (ptr1),y
         sta     display_host_count
@@ -155,8 +154,6 @@ hosts_drawn:
 
 ; void edit_host(config_nio_state_t *state)
 _edit_host:
-        sta     saved_state
-        stx     saved_state+1
         lda     _selected_host
         cmp     #HOST_MAX
         bcc     edit_host_valid
@@ -174,7 +171,7 @@ redraw_before_edit:
         jsr     _show_hosts
 
 prepare_host_edit:
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_HOST_COUNT
         lda     _selected_host
         cmp     (ptr1),y
@@ -207,7 +204,7 @@ prompt_host_value:
         ldx     #>_config_nio_store_buf
         jsr     _config_nio_bbc_host_set
 
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_HOST_COUNT
         lda     _selected_host
         cmp     (ptr1),y
@@ -223,9 +220,7 @@ edit_host_done:
 
 ; void clear_host(config_nio_state_t *state)
 _clear_host:
-        sta     saved_state
-        stx     saved_state+1
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_HOST_COUNT
         lda     (ptr1),y
         sta     action_host_count
@@ -263,7 +258,7 @@ next_host_shift:
 
 finish_host_shift:
         dec     action_host_count
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_HOST_COUNT
         lda     action_host_count
         sta     (ptr1),y
@@ -279,18 +274,6 @@ save_cleared_hosts:
         jsr     _config_nio_save_hosts
         rts
 
-load_state:
-        lda     saved_state
-        ldx     saved_state+1
-        rts
-
-restore_state_ptr:
-        lda     saved_state
-        sta     ptr1
-        lda     saved_state+1
-        sta     ptr1+1
-        rts
-
 ; X = column, A = row.
 goto_xy:
         pha
@@ -304,7 +287,6 @@ hosts_template:
         .byte   "CNHOSTS", 0
 
         .bss
-saved_state:        .res 2
 display_host_count: .res 1
 action_host_count:  .res 1
 row_index:          .res 1

@@ -9,6 +9,10 @@ const uint8_t runtime_offsets[] = { 0, 20, 40, 60 };
 uint8_t hosts_start;
 uint8_t browse_page_depth;
 
+/* Shared by all BBC assembly UI handlers. The run loop sets this once for
+ * the lifetime of the application; ui.s provides the common AX getter. */
+uint16_t saved_state;
+
 uint8_t current_screen;
 uint8_t selected_host;
 uint8_t selected_entry;

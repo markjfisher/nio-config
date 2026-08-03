@@ -22,7 +22,6 @@
 
 .export _handle_slots
 
-.importzp c_sp
 .importzp ptr1
 
 .import pusha
@@ -43,6 +42,7 @@
 .import _selected_drive
 .import _selected_slot
 .import _slots_focus
+.import load_state, restore_saved_state_ptr
 
 
 .include "config_nio_layout.inc"
@@ -70,14 +70,6 @@ MAPPING_SIZE      = 3
 
 _handle_slots:
         sta     saved_key
-
-        ; Preserve state independently of the changing C software stack.
-        ldy     #1
-        lda     (c_sp),y
-        sta     saved_state+1
-        dey
-        lda     (c_sp),y
-        sta     saved_state
 
         ; Tab toggles between drive and slot focus.
         lda     saved_key
@@ -152,7 +144,7 @@ slot_not_digit:
 ; ---------------------------------------------------------------------------
 
 slot_next_page:
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         ldy     #STATE_SLOTS_MORE
         lda     (ptr1),y
@@ -174,7 +166,7 @@ slot_next_page:
 ; ---------------------------------------------------------------------------
 
 slot_previous_page:
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         ldy     #STATE_SLOT_START
         lda     (ptr1),y
@@ -203,7 +195,7 @@ store_previous_page:
 ; ---------------------------------------------------------------------------
 
 redraw_slot_rows:
-        jsr     load_state_ax
+        jsr     load_state
         jmp     _draw_slot_rows
 
 slot_up:
@@ -260,7 +252,7 @@ map_selected_slot:
         lda     #1
         sta     mapping_tmp+MAPPING_VALID
 
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
         ldy     #STATE_SLOT_START
         lda     (ptr1),y
         clc
@@ -292,7 +284,7 @@ map_selected_slot:
 ; ---------------------------------------------------------------------------
 
 clear_selected_slot:
-        jsr     restore_state_ptr
+        jsr     restore_saved_state_ptr
 
         ldy     #STATE_SLOT_START
         lda     (ptr1),y
@@ -301,7 +293,7 @@ clear_selected_slot:
         sta     absolute_slot
 
         ; config_nio_delete_slot(state, absolute_slot)
-        jsr     load_state_ax
+        jsr     load_state
         jsr     pushax
 
         lda     absolute_slot
@@ -532,31 +524,15 @@ focus_was_drives:
 ; Shared state helpers
 ; ===========================================================================
 
-; Restore the persistent state pointer into zero-page ptr1.
-restore_state_ptr:
-        lda     saved_state
-        sta     ptr1
-        lda     saved_state+1
-        sta     ptr1+1
-        rts
-
-
-; Load state directly into AX.
-load_state_ax:
-        lda     saved_state
-        ldx     saved_state+1
-        rts
-
-
 ; config_nio_refresh_slots(state)
 refresh_slots:
-        jsr     load_state_ax
+        jsr     load_state
         jmp     _config_nio_refresh_slots
 
 
 ; config_nio_save_mappings(state)
 save_mappings:
-        jsr     load_state_ax
+        jsr     load_state
         jmp     _config_nio_save_mappings
 
 
@@ -630,9 +606,6 @@ return_true:
 ; ===========================================================================
 
 .segment "BSS"
-
-saved_state:
-        .res    2
 
 mapping_tmp:
         .res    MAPPING_SIZE
