@@ -61,6 +61,10 @@ $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_SRCS += $(call rwildcard,
 $(foreach dir,$(CONFIG_NIO_SRC_DIRS),$(eval CONFIG_NIO_ASM_SRCS += $(call rwildcard,$(dir)/,*.s)))
 CONFIG_NIO_SRCS := $(foreach src,$(CONFIG_NIO_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
 CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /support/,$(src)),,$(src)))
+# The splash loader is a separate executable with its own address map and
+# Makefile; never link it into the main config-nio application.
+CONFIG_NIO_SRCS := $(foreach src,$(CONFIG_NIO_SRCS),$(if $(findstring /splash/,$(src)),,$(src)))
+CONFIG_NIO_ASM_SRCS := $(foreach src,$(CONFIG_NIO_ASM_SRCS),$(if $(findstring /splash/,$(src)),,$(src)))
 # Both BBC targets use the smaller assembly mapping-mount wrapper.  Master
 # shares the same BBC state API; its XRAM table selection does not change this
 # wrapper's interface or storage requirements.

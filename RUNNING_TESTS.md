@@ -58,6 +58,12 @@ The BBC build is especially important: it verifies that the application still
 fits below the configured BBC HIMEM address and that the 6502 assembly links
 with the cc65-generated C objects.
 
+Build the shortened-screen BBC splash proof and its standalone DFS image:
+
+```sh
+make splash-bbc-disk
+```
+
 ## Beebium integration tests
 
 ### Prerequisites

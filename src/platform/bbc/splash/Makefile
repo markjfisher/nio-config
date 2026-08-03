@@ -1,0 +1,51 @@
+SHELL := /usr/bin/env bash
+.DEFAULT_GOAL := all
+
+SPLASH_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+REPO_ROOT := $(abspath $(SPLASH_DIR)/../../../..)
+BUILD_DIR ?= $(REPO_ROOT)/build/bbc/splash
+OBJ_DIR := $(BUILD_DIR)/obj
+STAGE_DIR := $(BUILD_DIR)/stage
+
+CA65 ?= ca65
+LD65 ?= ld65
+PYTHON ?= python3
+CREATE_SSD ?= $(REPO_ROOT)/../fujinet-nio-lib/scripts/create_ssd.py
+
+PROGRAM := $(BUILD_DIR)/SPLASH
+OBJECT := $(OBJ_DIR)/main.o
+SCREEN := $(BUILD_DIR)/SCREEN
+SSD := $(BUILD_DIR)/splash.ssd
+
+.PHONY: all check clean disk stage
+
+all: $(PROGRAM) $(SCREEN) check
+
+$(OBJECT): $(SPLASH_DIR)/main.s
+	@mkdir -p "$(dir $@)"
+	$(CA65) --cpu 6502 --listing "$(@:.o=.lst)" -o "$@" "$<"
+
+$(PROGRAM): $(OBJECT) $(SPLASH_DIR)/splash.cfg
+	@mkdir -p "$(dir $@)"
+	$(LD65) -C "$(SPLASH_DIR)/splash.cfg" -m "$(BUILD_DIR)/splash.map" -o "$@" "$<"
+
+$(SCREEN): $(SPLASH_DIR)/screen_gen.py
+	$(PYTHON) "$<" --output "$@"
+
+check: $(PROGRAM) $(SCREEN)
+	@test "$$(wc -c < "$(SCREEN)")" -eq 3840
+	@test "$$(wc -c < "$(PROGRAM)")" -le 1999
+
+stage: all
+	@mkdir -p "$(STAGE_DIR)"
+	cp "$(PROGRAM)" "$(STAGE_DIR)/SPLASH"
+	cp "$(SPLASH_DIR)/splash.inf" "$(STAGE_DIR)/SPLASH.inf"
+	cp "$(SCREEN)" "$(STAGE_DIR)/SCREEN"
+	cp "$(SPLASH_DIR)/screen.inf" "$(STAGE_DIR)/SCREEN.inf"
+
+disk: stage
+	$(PYTHON) "$(CREATE_SSD)" -i "$(STAGE_DIR)" -o "$(SSD)" -t SPLASH
+	@echo "Built $(SSD)"
+
+clean:
+	rm -rf "$(BUILD_DIR)"

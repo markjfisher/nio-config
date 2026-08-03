@@ -1,7 +1,8 @@
 TARGETS := msdos bbc master linux
 DEFAULT_TARGET := $(if $(TARGET),$(TARGET),all-targets)
 
-.PHONY: all all-targets clean disk confnio-bbc-disk confnio-master-disk $(TARGETS)
+.PHONY: all all-targets clean disk confnio-bbc-disk confnio-master-disk \
+	splash-bbc splash-bbc-disk $(TARGETS)
 
 all: $(DEFAULT_TARGET)
 
@@ -21,6 +22,12 @@ confnio-bbc-disk:
 
 confnio-master-disk:
 	$(MAKE) -f makefiles/build.mk TARGET=master config-nio-master-stage
+
+splash-bbc:
+	$(MAKE) -C src/platform/bbc/splash
+
+splash-bbc-disk:
+	$(MAKE) -C src/platform/bbc/splash disk
 
 clean:
 	rm -rf build
