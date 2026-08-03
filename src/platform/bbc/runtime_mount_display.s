@@ -19,12 +19,16 @@
 ; Therefore response parsing can safely use 8-bit offsets, while still
 ; rejecting a nonzero entries_len high byte.
 
+.export _refresh_runtime_mounts
 .export _runtime_mount_display
 
 .importzp ptr1
 .importzp tmp1
 .importzp tmp2
+.importzp c_sp
 
+.import decsp1
+.import incsp1
 .import pusha
 .import pushax
 
@@ -41,7 +45,7 @@ NIO_DISK_LIST_MOUNTS_HEADER   = 10
 BBC_MOUNTS_PAYLOAD            = 240
 NIO_DISK_LIST_MOUNTS_RESPONSE = BBC_MOUNTS_PAYLOAD + NIO_DISK_LIST_MOUNTS_HEADER
 BBC_RUNTIME_NAME_WIDTH        = 19
-
+BBC_DRIVE_COUNT               = 4
 ; ---------------------------------------------------------------------------
 ; Protocol offsets
 ; ---------------------------------------------------------------------------
@@ -55,6 +59,28 @@ LIST_TEXT           = NIO_DISK_LIST_MOUNTS_HEADER
 
 
 .segment "CODE"
+
+;; Need to implement this:
+; void refresh_runtime_mounts(void)
+; {
+;   uint8_t i;
+; 
+;   for (i = 0; i < BBC_DRIVE_COUNT; i++)
+;     (void) runtime_mount_display(i);
+; }
+
+_refresh_runtime_mounts:
+        lda     #$00
+        sta     mounts_loop_counter
+loop_mounts:
+        lda     mounts_loop_counter
+        cmp     #BBC_DRIVE_COUNT
+        bcs     done_mounts
+        jsr     _runtime_mount_display
+        inc     mounts_loop_counter
+        bne     loop_mounts
+done_mounts:
+        rts
 
 _runtime_mount_display:
 
@@ -415,3 +441,6 @@ mounts_device_status:
 
 mounts_response_len:
         .res    2
+
+mounts_loop_counter:
+        .res    1

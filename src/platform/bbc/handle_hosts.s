@@ -281,9 +281,8 @@ host_enter:
 
         jmp     return_true
 
-
+; TODO: better error here, this makes it look like it's hung
 browse_fetch_failed:
-        ; pause_line("Host error") ignores its string and waits for one key.
         jsr     _cgetc
 
         jmp     return_true

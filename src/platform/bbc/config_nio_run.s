@@ -5,6 +5,7 @@
 ;   X = high byte of state
 
 .export _config_nio_run
+.export load_state
 
 .importzp c_sp
 .importzp tmp1

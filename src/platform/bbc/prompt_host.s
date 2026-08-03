@@ -12,12 +12,15 @@
 .importzp c_sp
 
 .import pusha
+.import pushax
 .import decsp3
 .import incsp3
 
 .import _cputs
-.import _clear_field
+.import _gotoxy
+; .import _clear_field
 .import _config_nio_bbc_edit_line
+.import _config_nio_bbc_put_fixed
 
 .import _selected_host
 .import _hosts_start
@@ -63,7 +66,7 @@ HOST_EDIT_WIDTH = CONFIG_NIO_BBC_HOSTS_ROWS_URI_WIDTH
 
 .segment "CODE"
 
-.proc _prompt_host
+_prompt_host:
 
         ; y = CONFIG_NIO_BBC_HOSTS_ROWS_Y
         ;     + selected_host
@@ -75,15 +78,33 @@ HOST_EDIT_WIDTH = CONFIG_NIO_BBC_HOSTS_ROWS_URI_WIDTH
         sbc     _hosts_start
         sta     _config_nio_bbc_edit_y
 
-        ; clear_field(BBC_HOST_TEXT_X, y, HOST_EDIT_WIDTH)
-        lda     #BBC_HOST_TEXT_X
-        jsr     pusha
 
-        lda     _config_nio_bbc_edit_y
-        jsr     pusha
+        ;; Equivalent of
+        ;; clear_field(BBC_HOST_TEXT_X, y, HOST_EDIT_WIDTH)
 
+        ;; gotoxy(BBC_HOST_TEXT_X, _config_nio_bbc_edit_y)
+        jsr     goto_x_y
+
+        ;; config_nio_bbc_put_fixed("", HOST_EDIT_WIDTH);
+        lda     #0
+        tax
+        jsr     pushax                          ; null pointer just prints spaces as required
         lda     #HOST_EDIT_WIDTH
-        jsr     _clear_field
+        jsr     _config_nio_bbc_put_fixed
+
+        ;; gotoxy(BBC_HOST_TEXT_X, _config_nio_bbc_edit_y)
+        jsr     goto_x_y
+
+
+        ; ; clear_field(BBC_HOST_TEXT_X, y, HOST_EDIT_WIDTH)
+        ; lda     #BBC_HOST_TEXT_X
+        ; jsr     pusha
+
+        ; lda     _config_nio_bbc_edit_y
+        ; jsr     pusha
+
+        ; lda     #HOST_EDIT_WIDTH
+        ; jsr     _clear_field
 
         ; Configure the fixed editor values.
         lda     #<_config_nio_store_buf
@@ -103,7 +124,13 @@ HOST_EDIT_WIDTH = CONFIG_NIO_BBC_HOSTS_ROWS_URI_WIDTH
         ; Return config_nio_bbc_edit_line() directly.
         jmp     _config_nio_bbc_edit_line
 
-.endproc
+
+goto_x_y:
+        lda     #BBC_HOST_TEXT_X
+        jsr     pusha
+        lda     _config_nio_bbc_edit_y
+        jmp     _gotoxy
+
 
 
 .segment "RODATA"
