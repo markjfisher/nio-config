@@ -41,6 +41,16 @@ def wait_for_splash_crtc(bbc, timeout: float = 5.0):
     raise TimeoutError(f"splash CRTC configuration was not observed: {bbc.crtc.state}")
 
 
+def wait_for_screen_bytes(bbc, expected: bytes, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        actual = bytes(bbc.memory.address.peek.read(SCREEN_START, SCREEN_SIZE))
+        if actual == expected:
+            return
+        time.sleep(0.02)
+    raise TimeoutError("splash screen bytes were not copied into screen RAM")
+
+
 @pytest.fixture(scope="session")
 def splash_bbc_artifacts():
     subprocess.run(["make", "-C", str(_SPLASH_DIR), "disk"], check=True)
@@ -69,9 +79,10 @@ def test_bbc_splash_loads_short_mode5_screen_and_restores_mode7(
     command(bbc, "*FMOUNT 250 0")
 
     type_text(bbc, "*SPLASH\r")
-    crtc = wait_for_splash_crtc(bbc)
-
     expected_screen = splash_bbc_artifacts["screen"].read_bytes()
+    wait_for_splash_crtc(bbc)
+    wait_for_screen_bytes(bbc, expected_screen)
+    crtc = bbc.crtc.state
     actual_screen = bytes(bbc.memory.address.peek.read(SCREEN_START, SCREEN_SIZE))
     assert actual_screen == expected_screen
     assert tuple(crtc.registers[:14]) == SPLASH_CRTC_REGISTERS

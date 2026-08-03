@@ -44,6 +44,8 @@ ULA_PAL   = $FE21
 SCREEN_START       = $7100
 SCREEN_SIZE        = $0F00       ; 3840 bytes
 SCREEN_END         = SCREEN_START + SCREEN_SIZE
+LOAD_BUFFER        = $5800
+LOAD_BUFFER_END    = LOAD_BUFFER + SCREEN_SIZE
 
 SCREEN_CHAR_ADDR   = SCREEN_START / 8
 
@@ -53,6 +55,7 @@ SCREEN_CRTC_LO     = <SCREEN_CHAR_ADDR
 SCREEN_ROWS        = 12          ; 12 * 8 = 96 raster lines
 
         .assert SCREEN_END = $8000, error, "Screen must end at &8000"
+        .assert LOAD_BUFFER_END <= $6931, error, "Load buffer overlaps splash"
         .assert SCREEN_CRTC_HI = $0E, error, "Unexpected CRTC high byte"
         .assert SCREEN_CRTC_LO = $20, error, "Unexpected CRTC low byte"
 
@@ -75,91 +78,45 @@ _start:
         ldx #0
         jsr OSBYTE
 
-        ; Clear the target before selecting the custom display. This removes
-        ; any old MODE 7 characters from the part of the target that overlaps
-        ; the normal screen and gives the loader a black image to fill.
-        lda #0
-        ldx #15                 ; 15 pages = 3840 bytes
-        ldy #0
-@clear_page:
-        sta SCREEN_START,y
-        iny
-        bne @clear_page
-        inc @clear_page+2      ; advance the high byte of STA's address
-        dex
-        bne @clear_page
+        ; Put the display on the splash geometry with an all-black palette
+        ; before disk I/O. The image is loaded into temporary RAM, so neither
+        ; disk I/O nor a partially loaded bitmap can affect the visible screen.
+        jsr set_video_blank
 
-        ; Load the already converted raw Mode 5 file. The target has been
-        ; cleared first, so the part overlapping the normal MODE 7 screen is
-        ; blank while MOS performs the DFS access.
+        ; Load the already converted raw Mode 5 file into temporary RAM.
         ;
         ; OSCLI does not require the leading '*' used at the BASIC prompt.
         ldx #<load_command
         ldy #>load_command
         jsr OSCLI
 
-        ;
-        ; Configure the Video ULA palette before selecting the shortened
-        ; display window.
-        ;
-        ; Palette byte:
-        ;
-        ;   high nibble = logical palette index
-        ;   low bits    = physical colour EOR 7
-        ;
-        ; Mode 5 byte shifting visits alias indices as well as the four
-        ; canonical logical colours. Program all 16 entries so the generated
-        ; solid-byte bands resolve consistently to:
-        ;
-        ;   0 = black
-        ;   1 = red
-        ;   2 = yellow
-        ;   3 = white
-        ;
-        ldx #0
-@set_palette:
-        lda palette_values,x
-        sta ULA_PAL
-        inx
-        cpx #16
-        bne @set_palette
-
-        ;
-        ; Set the CRTC registers, including the shortened display window. The
-        ; complete SCREEN file is already resident before this takes effect.
-        ;
-        ; These are based on the standard PAL Mode 5 timing. Only:
-        ;
-        ;   R6      displayed height
-        ;   R12/R13 screen start
-        ;
-        ; are materially changed for this POC.
-        ;
-        ldx #0
-
-@set_crtc:
-        stx CRTC_ADDR
-        lda crtc_values,x
-        sta CRTC_DATA
-
-        inx
-        cpx #14
-        bne @set_crtc
-
-        ;
-        ; Select the Mode 5 Video ULA pixel format.
-        ;
-        ; &C4 is the standard Mode 5 ULA control value.
-        ;
-        lda #$C4
-        sta ULA_CTRL
-
-        ; The RETURN that launched *SPLASH can still be in the keyboard
-        ; buffer because it was typed after the initial flush. Discard it
-        ; before waiting, so OSRDCH cannot consume the command terminator.
+        ; Discard any launch type-ahead while the display is still black. This
+        ; is deliberately done before the final video setup, rather than
+        ; flushing input after the custom display is active.
         lda #15
         ldx #0
         jsr OSBYTE
+
+        ; MOS disk I/O and OSRDCH may have restored their own video registers.
+        ; Reapply the blank custom state before copying the image.
+        jsr set_video_blank
+
+        ; Copy the complete image into the actual CRTC display memory while
+        ; the palette is still black. The visible palette is installed only
+        ; after every byte is in place.
+        ldx #15
+        ldy #0
+@copy_page:
+        lda LOAD_BUFFER,y
+        sta SCREEN_START,y
+        iny
+        bne @copy_page
+        inc @copy_page+2      ; source high byte
+        inc @copy_page+5      ; destination high byte
+        dex
+        bne @copy_page
+
+        jsr set_video
 
         ; Wait for a new key without making any further MOS display calls. The
         ; custom CRTC and ULA state therefore remains active for the whole
@@ -175,6 +132,58 @@ _start:
         lda #7                  ; MODE 7
         jsr OSWRCH
 
+        rts
+
+; ---------------------------------------------------------------------------
+; Install the custom palette, CRTC geometry, and Mode 5 ULA format.
+; ---------------------------------------------------------------------------
+
+set_video:
+        ; Palette byte:
+        ;   high nibble = logical palette index
+        ;   low bits    = physical colour EOR 7
+        ldx #0
+@set_palette:
+        lda palette_values,x
+        sta ULA_PAL
+        inx
+        cpx #16
+        bne @set_palette
+
+        ; Standard PAL timing with a 12-row visible window at SCREEN_START.
+        ldx #0
+@set_crtc:
+        stx CRTC_ADDR
+        lda crtc_values,x
+        sta CRTC_DATA
+        inx
+        cpx #14
+        bne @set_crtc
+
+        lda #$C4                 ; standard Mode 5 ULA control value
+        sta ULA_CTRL
+        rts
+
+set_video_blank:
+        ldx #0
+@set_black_palette:
+        lda black_palette,x
+        sta ULA_PAL
+        inx
+        cpx #16
+        bne @set_black_palette
+
+        ldx #0
+@set_crtc:
+        stx CRTC_ADDR
+        lda crtc_values,x
+        sta CRTC_DATA
+        inx
+        cpx #14
+        bne @set_crtc
+
+        lda #$C4
+        sta ULA_CTRL
         rts
 
 ; ---------------------------------------------------------------------------
@@ -227,9 +236,15 @@ palette_values:
         .byte $87, $94, $A7, $B7
         .byte $C4, $D7, $E7, $F0
 
+black_palette:
+        .byte $07, $17, $27, $37
+        .byte $47, $57, $67, $77
+        .byte $87, $97, $A7, $B7
+        .byte $C7, $D7, $E7, $F7
+
 ; ---------------------------------------------------------------------------
 ; OSCLI command
 ; ---------------------------------------------------------------------------
 
 load_command:
-        .byte "LOAD SCREEN 7100", 13
+        .byte "LOAD SCREEN 5800", 13

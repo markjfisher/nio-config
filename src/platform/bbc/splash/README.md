@@ -11,13 +11,16 @@ Only 3,840 bytes of screen RAM are used:
 
 ```text
 &6931              splash program
+&5800..&66FF       temporary SCREEN load buffer
 &7100..&7FFF       SCREEN (40 bytes x 8 rasters x 12 rows)
 ```
 
 The CRTC retains normal PAL frame timing. Register R6 limits the displayed
 bitmap to 12 character rows, while R12/R13 point the display at `&7100 / 8 =
 &0E20`. The unused part of the frame is border rather than allocated screen
-memory.
+memory. `SCREEN` is loaded into the temporary buffer first, copied to screen
+RAM with an all-black palette, and only then revealed. This prevents both
+MODE 7 teletext garbage and partially loaded bitmap data from being displayed.
 
 Build the program and generated image:
 
@@ -30,6 +33,10 @@ Build a standalone DFS image containing `SPLASH` and `SCREEN`:
 ```sh
 make -C src/platform/bbc/splash disk
 ```
+
+These standalone targets build only the splash program, generated image, and
+DFS disk. The Beebium integration wrapper additionally builds the repository's
+FujiNet test dependency because its fixture needs the FujiNet service binary.
 
 The outputs are placed under `build/bbc/splash/`. The disk can be mounted and
 the proof run with:
