@@ -45,19 +45,33 @@ static void test_refresh(void)
   setup();
   CHECK(amiga_ctl_net_refresh(&ctl));
   CHECK(ctl.net.have_status && ctl.net.have_config && ctl.net.have_adapter);
+  CHECK(ctl.net.have_info);
+  CHECK_STR(ctl.net.info.firmware, "0.1.1");
   CHECK_STR(state.status, "Connected: home");
   CHECK(ctl.netinfo.count == AMIGA_NET_ROWS);
   CHECK(amiga_ctl_net_poll(&ctl) == 2);
 
-  /* Firmware without GET_ADAPTER_INFO still shows the Wi-Fi details. */
+  /* Firmware without GET_ADAPTER_INFO still shows the Wi-Fi and device
+   * details. */
   fake_wifi_adapter_error(FN_ERR_UNSUPPORTED);
   CHECK(amiga_ctl_net_refresh(&ctl));
   CHECK(!ctl.net.have_adapter && ctl.net.adapter_error == FN_ERR_UNSUPPORTED);
+  CHECK(ctl.net.have_info);
 
-  /* No Wi-Fi service at all. */
+  /* Firmware without GetInfo still shows the Wi-Fi details and MAC. */
+  fake_wifi_adapter_error(FN_OK);
+  fake_fuji_info_error(FN_ERR_UNSUPPORTED);
+  CHECK(amiga_ctl_net_refresh(&ctl));
+  CHECK(ctl.net.have_adapter);
+  CHECK(!ctl.net.have_info && ctl.net.info_error == FN_ERR_UNSUPPORTED);
+  CHECK(!ctl.net.info.firmware[0]);
+  fake_fuji_info_error(FN_OK);
+
+  /* No Wi-Fi service at all: the device details are still read. */
   fake_wifi_status_error(FN_ERR_UNSUPPORTED);
   CHECK(!amiga_ctl_net_refresh(&ctl));
   CHECK_STR(state.status, "This FujiNet does not report Wi-Fi status");
+  CHECK(ctl.net.have_info);
   CHECK(amiga_ctl_net_poll(&ctl) == 0xFF);
   fake_wifi_status_error(FN_ERR_IO);
   CHECK(!amiga_ctl_net_refresh(&ctl));
@@ -233,6 +247,7 @@ static void test_script(void)
   CHECK(strstr(transcript, "NET Wi-Fi         Connected\n") != NULL);
   CHECK(strstr(transcript, "NET MAC address   24:6F:28:AB:CD:EF\n") != NULL);
   CHECK(strstr(transcript, "NET Firmware      0.1.1\n") != NULL);
+  CHECK(strstr(transcript, "NET Profile       S3 + FujiBus over GPIO (e.g. RS232)\n") != NULL);
   CHECK(strstr(transcript, "\nOK\n") != NULL);
   CHECK(run("dump network") == AMIGA_SCRIPT_OK);
   CHECK(strstr(transcript, "NET IP address    192.168.1.50\n") != NULL);

@@ -24,7 +24,7 @@ typedef enum {
 #define AMIGA_CMD_OUT_MAX 80
 
 #define AMIGA_NET_SCAN_MAX FN_WIFI_MAX_SCAN_RECORDS
-#define AMIGA_NET_ROWS 11
+#define AMIGA_NET_ROWS 12
 
 /* What the Configuration window shows: its Device and Network tabs, and
  * the Join picker that Network > Join... opens in place of its rows. */
@@ -41,9 +41,12 @@ typedef struct {
   uint8_t have_config;
   uint8_t have_adapter;
   uint8_t adapter_error;   /* FN_ERR_UNSUPPORTED: firmware predates it */
+  uint8_t have_info;
+  uint8_t info_error;      /* FN_ERR_UNSUPPORTED: firmware predates it */
   fn_wifi_status_t status;
   fn_wifi_config_t config;
-  fn_wifi_adapter_info_t adapter;
+  fn_wifi_adapter_info_t adapter;   /* Wi-Fi GET_ADAPTER_INFO: the MAC */
+  fn_fuji_info_t info;              /* FujiDevice GetInfo: firmware, profile */
   uint8_t scan_count;
   fn_wifi_scan_record_t scan[AMIGA_NET_SCAN_MAX];
   uint8_t view;            /* AMIGA_NET_VIEW_* */

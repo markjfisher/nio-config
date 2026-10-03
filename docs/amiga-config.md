@@ -14,7 +14,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
-| Wi-Fi / adapter info | **Settings ▸ Configure** opens the **Configuration** window: **Device** tab (firmware version) and **Network** tab (link state, SSID, signal, access point, IP, subnet, gateway, DNS, MAC); Refresh / **Join…** (scan, pick, passphrase) / Close |
+| Wi-Fi / adapter info | **Settings ▸ Configure** opens the **Configuration** window: **Device** tab (firmware version, build profile) and **Network** tab (link state, SSID, signal, access point, IP, subnet, gateway, DNS, MAC); Refresh / **Join…** (scan, pick, passphrase) / Close |
 
 The pages use the same model as the Shell commands, so the two can be used
 side by side:
@@ -123,8 +123,9 @@ the window's list; **Back** (or Esc) returns. The main window's **Project**,
 config-nio, Settings changes apply at once, and Help topics (and Contents)
 open in this window.
 
-The **Device** tab shows the FujiNet's **Firmware** version. The **Network**
-tab shows:
+The **Device** tab shows the FujiNet's **Firmware** version and build
+**Profile** (e.g. `S3 + FujiBus over GPIO (e.g. RS232)`). The **Network** tab
+shows:
 
 | Row | Shows |
 | --- | --- |
@@ -136,8 +137,11 @@ tab shows:
 | MAC address | The FujiNet's station MAC |
 | Wi-Fi control | FujiNet (ESP32), Host computer, Simulated or Unavailable |
 
-MAC address and Firmware need firmware with the Wi-Fi service's
-`GET_ADAPTER_INFO` command; older firmware shows `Needs newer firmware`.
+MAC address needs firmware with the Wi-Fi service's `GET_ADAPTER_INFO`
+command, and Firmware and Profile need FujiDevice's `GetInfo`
+(`fn_wifi_get_adapter_info()` and `fn_fuji_get_info()` in fujinet-nio-lib).
+Each is read on its own: older firmware shows `Needs newer firmware` for what
+it lacks, and the Device tab still works on a FujiNet without Wi-Fi.
 
 To change network:
 
@@ -195,7 +199,7 @@ failed, and 5 otherwise.
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
-| `wifi status` | Re-read the Configuration window's data and write `NET <label> <value>` per row (Network rows, then Firmware) |
+| `wifi status` | Re-read the Configuration window's data and write `NET <label> <value>` per row (Network rows, then Firmware and Profile) |
 | `wifi scan` | Open the Join picker; write `NETWORK N RSSI OPEN\|SECURED SSID` per listed network (hidden ones are left out) |
 | `wifi connect N [PASSPHRASE]` | Join scanned network `N` (after `wifi scan`); the passphrase is the rest of the line, spaces included |
 | `wifi join SSID [PASSPHRASE]` | Join any network by name, hidden ones included. Without a passphrase, the saved network keeps its stored one; another network is joined as open |

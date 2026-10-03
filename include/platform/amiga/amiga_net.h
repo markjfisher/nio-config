@@ -3,14 +3,15 @@
 
 #include "amiga_ctl.h"
 
-/* Network page: Wi-Fi status, addresses, MAC and firmware version, read
- * through the fujinet-nio Wi-Fi service.  Join scans for networks, takes a
- * passphrase and saves the choice on the FujiNet, which then reconnects. */
+/* Configuration window: Wi-Fi status, addresses and MAC from the fujinet-nio
+ * Wi-Fi service, and the firmware version and build profile from FujiDevice,
+ * which needs no network.  Join scans for networks, takes a passphrase and
+ * saves the choice on the FujiNet, which then reconnects. */
 
 #define AMIGA_NET_LABEL_W 14
 
 /* Configuration window rows: the Network tab shows the first
- * AMIGA_NET_NETWORK_ROWS, the Device tab AMIGA_NET_ROW_FIRMWARE. */
+ * AMIGA_NET_NETWORK_ROWS, the Device tab the rest (AMIGA_NET_DEVICE_ROWS). */
 enum {
   AMIGA_NET_ROW_LINK = 0,
   AMIGA_NET_ROW_SSID,
@@ -22,9 +23,11 @@ enum {
   AMIGA_NET_ROW_DNS,
   AMIGA_NET_ROW_MAC,
   AMIGA_NET_ROW_CONTROL,
-  AMIGA_NET_ROW_FIRMWARE
+  AMIGA_NET_ROW_FIRMWARE,
+  AMIGA_NET_ROW_PROFILE
 };
 #define AMIGA_NET_NETWORK_ROWS AMIGA_NET_ROW_FIRMWARE
+#define AMIGA_NET_DEVICE_ROWS (AMIGA_NET_ROWS - AMIGA_NET_NETWORK_ROWS)
 
 #define AMIGA_NET_PASS_MIN 8
 #define AMIGA_NET_PASS_MAX FN_WIFI_MAX_PASSWORD
@@ -57,8 +60,9 @@ int amiga_net_scan_row_display(const fn_wifi_scan_record_t *r, uint8_t ssid_w,
 void amiga_net_scan_row_text(const fn_wifi_scan_record_t *r, uint8_t ssid_w,
                              char *out);
 
-/* Re-reads status, saved config and adapter details.  Succeeds when the
- * status could be read; MAC and firmware are optional. */
+/* Re-reads status, saved config, the MAC and the device details.  Succeeds
+ * when the Wi-Fi status could be read; MAC, firmware and profile are optional
+ * and are read even when it can't be. */
 int amiga_ctl_net_refresh(amiga_ctl_t *ctl);
 /* Link state after re-reading the status, or 0xFF when that failed. */
 uint8_t amiga_ctl_net_poll(amiga_ctl_t *ctl);

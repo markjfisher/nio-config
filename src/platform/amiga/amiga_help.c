@@ -117,7 +117,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "the FujiNet each time it opens, and the main window waits until you "
   "press Close (or Esc, or its close gadget).\n"
   "\n"
-  "- The Device tab shows the FujiNet's firmware version.\n"
+  "- The Device tab shows the FujiNet's firmware version and build "
+  "profile.\n"
   "- The Network tab shows whether Wi-Fi is connected, the network (SSID) "
   "it uses, the signal, the access point, its IP address, subnet mask, "
   "gateway and DNS server, its MAC address and who controls the Wi-Fi.\n"
@@ -144,8 +145,8 @@ static const char *const texts[AMIGA_HELP_TOPICS] = {
   "network's name and passphrase; leave the passphrase empty for an open "
   "network.\n"
   "\n"
-  "MAC address and Firmware read \"Needs newer firmware\" when the "
-  "FujiNet's firmware cannot report them.",
+  "MAC address, Firmware and Profile read \"Needs newer firmware\" when "
+  "the FujiNet's firmware cannot report them.",
 
   "The Settings menu changes how the Browse page shows files. Settings "
   "are saved on the FujiNet at once.\n"

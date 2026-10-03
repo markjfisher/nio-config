@@ -79,12 +79,12 @@ void amiga_net_row_text(const amiga_net_t *net, uint16_t row, char *out)
   static const char *const labels[AMIGA_NET_ROWS] = {
     "Wi-Fi", "Network", "Signal", "Access point", "IP address",
     "Subnet mask", "Gateway", "DNS server", "MAC address", "Wi-Fi control",
-    "Firmware"
+    "Firmware", "Profile"
   };
   const fn_wifi_status_t *s = &net->status;
   uint8_t hs = net->have_status;
   uint8_t connected = hs && s->link_state == 2;
-  char value[64];
+  char value[FN_FUJI_MAX_BUILD_PROFILE + 1];
 
   value[0] = 0;
   switch (row) {
@@ -140,10 +140,17 @@ void amiga_net_row_text(const amiga_net_t *net, uint16_t row, char *out)
                       ? "Needs newer firmware" : "Unknown");
     break;
   case AMIGA_NET_ROW_FIRMWARE:
-    if (net->have_adapter && net->adapter.firmware[0])
-      amiga_sprintf(value, "%.40s", net->adapter.firmware);
+    if (net->have_info && net->info.firmware[0])
+      amiga_sprintf(value, "%.32s", net->info.firmware);
     else
-      strcpy(value, net->adapter_error == FN_ERR_UNSUPPORTED
+      strcpy(value, net->info_error == FN_ERR_UNSUPPORTED
+                      ? "Needs newer firmware" : "Unknown");
+    break;
+  case AMIGA_NET_ROW_PROFILE:
+    if (net->have_info && net->info.profile[0])
+      amiga_sprintf(value, "%.64s", net->info.profile);
+    else
+      strcpy(value, net->info_error == FN_ERR_UNSUPPORTED
                       ? "Needs newer firmware" : "Unknown");
     break;
   case AMIGA_NET_ROW_CONTROL:
@@ -205,6 +212,10 @@ int amiga_ctl_net_refresh(amiga_ctl_t *ctl)
   n->have_adapter = n->adapter_error == FN_OK;
   if (!n->have_adapter)
     memset(&n->adapter, 0, sizeof(n->adapter));
+  n->info_error = fn_fuji_get_info(&n->info);
+  n->have_info = n->info_error == FN_OK;
+  if (!n->have_info)
+    memset(&n->info, 0, sizeof(n->info));
   amiga_list_set_count(&ctl->netinfo, AMIGA_NET_ROWS);
 
   if (!n->have_status) {

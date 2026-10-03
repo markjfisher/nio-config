@@ -93,7 +93,9 @@ void test_net(void)
   strcpy(net.config.ssid, "home");
   memcpy(net.adapter.mac.bytes, mac, 6);
   net.adapter.mac.valid = 1;
-  strcpy(net.adapter.firmware, "0.1.1");
+  net.have_info = 1;
+  strcpy(net.info.firmware, "0.1.1");
+  strcpy(net.info.profile, "S3 + FujiBus over GPIO (e.g. RS232)");
   amiga_net_row_text(&net, AMIGA_NET_ROW_LINK, text);
   CHECK_STR(text, "Wi-Fi         Connected");
   amiga_net_row_text(&net, AMIGA_NET_ROW_SSID, text);
@@ -110,6 +112,8 @@ void test_net(void)
   CHECK_STR(text, "MAC address   24:6F:28:0A:BC:01");
   amiga_net_row_text(&net, AMIGA_NET_ROW_FIRMWARE, text);
   CHECK_STR(text, "Firmware      0.1.1");
+  amiga_net_row_text(&net, AMIGA_NET_ROW_PROFILE, text);
+  CHECK_STR(text, "Profile       S3 + FujiBus over GPIO (e.g. RS232)");
   amiga_net_row_text(&net, AMIGA_NET_ROW_CONTROL, text);
   CHECK_STR(text, "Wi-Fi control FujiNet (ESP32)");
 
@@ -130,11 +134,23 @@ void test_net(void)
   amiga_net_row_text(&net, AMIGA_NET_ROW_SSID, text);
   CHECK_STR(text, "Network       (none set)");
 
-  /* Older firmware without adapter details. */
+  /* Older firmware: the MAC (Wi-Fi) and the device details (FujiDevice)
+   * come from separate commands and fall back separately. */
   net.have_adapter = 0;
   net.adapter_error = FN_ERR_UNSUPPORTED;
+  amiga_net_row_text(&net, AMIGA_NET_ROW_MAC, text);
+  CHECK_STR(text, "MAC address   Needs newer firmware");
+  amiga_net_row_text(&net, AMIGA_NET_ROW_FIRMWARE, text);
+  CHECK_STR(text, "Firmware      0.1.1");
+  net.have_info = 0;
+  net.info_error = FN_ERR_UNSUPPORTED;
   amiga_net_row_text(&net, AMIGA_NET_ROW_FIRMWARE, text);
   CHECK_STR(text, "Firmware      Needs newer firmware");
+  amiga_net_row_text(&net, AMIGA_NET_ROW_PROFILE, text);
+  CHECK_STR(text, "Profile       Needs newer firmware");
+  net.info_error = FN_ERR_IO;
+  amiga_net_row_text(&net, AMIGA_NET_ROW_PROFILE, text);
+  CHECK_STR(text, "Profile       Unknown");
 
   /* Join picker rows: the name padded or cut to its column. */
   memset(&r, 0, sizeof(r));

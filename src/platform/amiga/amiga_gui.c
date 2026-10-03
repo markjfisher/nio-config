@@ -1294,7 +1294,7 @@ static struct Gadget cfg_gad[CFG_GID_COUNT];
 static struct PropInfo cfg_pi;
 static struct Image cfg_knob;
 static uint8_t cfg_prop_active;
-static amiga_list_t cfg_device;   /* the Device tab's one row */
+static amiga_list_t cfg_device;   /* the Device tab's rows */
 static ULONG cfg_last_secs;
 static ULONG cfg_last_micros;
 static uint16_t cfg_last_index = AMIGA_LIST_NONE;
@@ -1454,7 +1454,8 @@ static void cfg_paint_rows(void)
       bars = amiga_net_scan_row_display(&gctl->net.scan[idx], cfg_ssid_cols(),
                                         tmp_text, &bars_col);
     else if (gctl->net.view == AMIGA_NET_VIEW_DEVICE)
-      amiga_net_row_text(&gctl->net, AMIGA_NET_ROW_FIRMWARE, tmp_text);
+      amiga_net_row_text(&gctl->net, (uint16_t) (AMIGA_NET_NETWORK_ROWS + idx),
+                         tmp_text);
     else
       bars = amiga_net_row_display(&gctl->net, idx, tmp_text, &bars_col);
     text_at((WORD) (row.left + 2), (WORD) (row.top + 1), padded(tmp_text, cols),
@@ -1944,7 +1945,7 @@ static int gui_open_config(void)
   }
   cfg_make_gadgets();
   amiga_list_init(&cfg_device, cfg.list_rows);
-  amiga_list_set_count(&cfg_device, 1);
+  amiga_list_set_count(&cfg_device, AMIGA_NET_DEVICE_ROWS);
   amiga_list_set_rows(&gctl->netinfo, cfg.list_rows);
   amiga_list_set_rows(&gctl->networks, cfg.list_rows);
   gctl->net.view = AMIGA_NET_VIEW_DEVICE;

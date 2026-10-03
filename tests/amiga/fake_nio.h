@@ -27,11 +27,13 @@ void fake_dir_put(const char *uri, const fake_dir_entry_t *entries,
 void fake_dir_fail(const char *uri);
 
 /* Wi-Fi service.  Reset leaves a connected ESP32-style adapter on "home"
- * with a stored passphrase, firmware "0.1.1" and no scan results. */
+ * with a stored passphrase and no scan results; FujiDevice reports firmware
+ * "0.1.1" and profile "S3 + FujiBus over GPIO (e.g. RS232)". */
 fn_wifi_status_t *fake_wifi_status(void);
 fn_wifi_config_t *fake_wifi_config(void);
 void fake_wifi_status_error(uint8_t err);    /* FN_OK: answer normally */
 void fake_wifi_adapter_error(uint8_t err);   /* e.g. FN_ERR_UNSUPPORTED */
+void fake_fuji_info_error(uint8_t err);      /* e.g. FN_ERR_UNSUPPORTED */
 void fake_wifi_set_error(uint8_t err);
 void fake_wifi_scan_error(uint8_t err);
 void fake_wifi_add_network(const char *ssid, int8_t rssi, uint8_t auth);

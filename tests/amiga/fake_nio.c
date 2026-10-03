@@ -393,6 +393,7 @@ static fn_wifi_status_t wifi_status;
 static fn_wifi_config_t wifi_config;
 static char wifi_password[FN_WIFI_MAX_PASSWORD + 1];
 static uint8_t wifi_status_err, wifi_adapter_err, wifi_set_err, wifi_scan_err;
+static uint8_t fuji_info_err;
 static fn_wifi_scan_record_t wifi_nets[FAKE_WIFI_NETS];
 static uint8_t wifi_net_count;
 static unsigned wifi_set_calls, wifi_scan_calls;
@@ -423,6 +424,7 @@ static void fake_wifi_reset(void)
   strcpy(wifi_config.ssid, "home");
   strcpy(wifi_password, "home-pass");
   wifi_status_err = wifi_adapter_err = wifi_set_err = wifi_scan_err = FN_OK;
+  fuji_info_err = FN_OK;
   wifi_net_count = 0;
   wifi_set_calls = 0;
   wifi_scan_calls = 0;
@@ -433,6 +435,7 @@ fn_wifi_status_t *fake_wifi_status(void) { return &wifi_status; }
 fn_wifi_config_t *fake_wifi_config(void) { return &wifi_config; }
 void fake_wifi_status_error(uint8_t err) { wifi_status_err = err; }
 void fake_wifi_adapter_error(uint8_t err) { wifi_adapter_err = err; }
+void fake_fuji_info_error(uint8_t err) { fuji_info_err = err; }
 void fake_wifi_set_error(uint8_t err) { wifi_set_err = err; }
 void fake_wifi_scan_error(uint8_t err) { wifi_scan_err = err; }
 unsigned fake_wifi_set_calls(void) { return wifi_set_calls; }
@@ -483,7 +486,16 @@ uint8_t fn_wifi_get_adapter_info(fn_wifi_adapter_info_t *info)
   memset(info, 0, sizeof(*info));
   memcpy(info->mac.bytes, mac, 6);
   info->mac.valid = 1;
+  return FN_OK;
+}
+
+uint8_t fn_fuji_get_info(fn_fuji_info_t *info)
+{
+  if (fuji_info_err)
+    return fuji_info_err;
+  memset(info, 0, sizeof(*info));
   strcpy(info->firmware, "0.1.1");
+  strcpy(info->profile, "S3 + FujiBus over GPIO (e.g. RS232)");
   return FN_OK;
 }
 
