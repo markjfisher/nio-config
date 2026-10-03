@@ -1,7 +1,8 @@
 # config-nio for the Amiga Workbench
 
 `config-nio` for the Amiga is a Workbench program. It configures FujiNet NIO
-hosts, the disk images you mount and the `DN0:`–`DN7:` drives. It runs on
+hosts, the disk images you mount, the `DN0:`–`DN7:` drives and the FujiNet's
+Wi-Fi network. It runs on
 Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 
 ## Feature map
@@ -13,6 +14,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
+| Wi-Fi / adapter info | **Settings ▸ Configure** opens the **Configuration** window: **Device** tab (firmware version, build profile) and **Network** tab (link state, SSID, signal, access point, IP, subnet, gateway, DNS, MAC); Refresh / **Join…** (scan, pick, passphrase) / Close |
 
 The pages use the same model as the Shell commands, so the two can be used
 side by side:
@@ -25,6 +27,7 @@ side by side:
 | Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
 | Drives page | `FDRIVE` |
 | Eject | `FUMOUNT drive` (the image stays in its slot) |
+| Configuration window / Join… | Wi-Fi service (`0xF3`) `GET_STATUS`, `GET_CONFIG`, `GET_ADAPTER_INFO`, `SCAN`, `SET_CONFIG` |
 
 Every change is saved to the FujiNet as soon as you make it. For that
 reason the window has no Save/Use/Cancel buttons.
@@ -105,6 +108,69 @@ page.
   `..` row at the top of a drawer's listing, goes to the parent drawer. Help shows About. Esc quits.
 - Remove, Clear, Eject and Replace ask for confirmation first.
 - **Project** menu: About… (Right-Amiga-?), Quit (Right-Amiga-Q).
+- **Settings** menu: date and size formats, and **Configure** (the
+  Configuration window below).
+
+## Configuration
+
+**Settings ▸ Configure** opens the **Configuration** window over the main
+window, which waits until it closes. It is read from the FujiNet when it
+opens, and again with **Refresh** (or Return). It has two tabs (Tab switches
+between them) and a **Close** button on every tab; Esc or the close gadget
+also close it. **Help** shows the built-in **Configuration** help topic in
+the window's list; **Back** (or Esc) returns. The main window's **Project**,
+**Settings** and **Help** menus work in this window too: Quit quits
+config-nio, Settings changes apply at once, and Help topics (and Contents)
+open in this window.
+
+The **Device** tab shows the FujiNet's **Firmware** version and build
+**Profile** (e.g. `S3 + FujiBus over GPIO (e.g. RS232)`). The **Network** tab
+shows:
+
+| Row | Shows |
+| --- | --- |
+| Wi-Fi | Connected, Connecting, Disconnected, Failed to connect, or Off |
+| Network | The saved SSID |
+| Signal | A 4-bar icon and Excellent/Good/Fair/Weak (when connected): 4 bars from −55 dBm, 3 from −67, 2 from −75, 1 from −85. `SCRIPT` output keeps the dBm reading |
+| Access point | BSSID of the access point in use |
+| IP address, Subnet mask, Gateway, DNS server | IPv4 settings (when connected) |
+| MAC address | The FujiNet's station MAC |
+| Wi-Fi control | FujiNet (ESP32), Host computer, Simulated or Unavailable |
+
+MAC address needs firmware with the Wi-Fi service's `GET_ADAPTER_INFO`
+command, and Firmware and Profile need FujiDevice's `GetInfo`
+(`fn_wifi_get_adapter_info()` and `fn_fuji_get_info()` in fujinet-nio-lib).
+Each is read on its own: older firmware shows `Needs newer firmware` for what
+it lacks, and the Device tab still works on a FujiNet without Wi-Fi.
+
+To change network:
+
+1. On the **Network** tab press **Join…**. The FujiNet scans, and the list
+   becomes the network picker (**Join**, **Rescan**, **Other…**, **Cancel**,
+   **Close**) showing each network's signal (bar icon and rating) and
+   Open/Secured. The saved
+   network, else the strongest, is selected. Hidden networks (no name) are
+   not listed.
+2. Select a network and press **Join** (or double-click, or Return). For a
+   secured network a **Join Wi-Fi Network** window asks for the passphrase
+   (8–64 characters); press **Join** or Return there, **Cancel** to go back.
+   For the saved network, leave it empty to keep the stored passphrase. An
+   open network needs no passphrase; joining one asks first when it replaces
+   the current network.
+3. For a hidden network press **Other…**: the window also has a
+   **Network** field for its name. Return moves from Network to Passphrase.
+   Leave the passphrase empty for an open network.
+4. **Rescan** scans again; **Cancel** or Esc goes back to the Network tab.
+
+Join saves the SSID and passphrase on the FujiNet (persisted), clears any
+pinned BSSID, enables Wi-Fi and asks the FujiNet to reconnect. config-nio then
+waits up to 10 seconds and reports `Connected to … address …`,
+`Could not connect …` or `Still connecting …`. The passphrase is shown as you
+type it, is wiped from memory once Join has sent it, and is never read back
+from the FujiNet.
+
+A FujiNet whose Wi-Fi is managed by its host computer (POSIX host mode) can
+be viewed but not switched.
 
 ## Drives, FMOUNT and FMOUNTRESTORE
 
@@ -133,7 +199,12 @@ failed, and 5 otherwise.
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
-| `dump hosts\|entries\|drives\|catalogue\|status`, `dump slot N` | Write state to the transcript (`dump catalogue` writes `SLOT N RO\|RW URI` per occupied slot) |
+| `wifi status` | Re-read the Configuration window's data and write `NET <label> <value>` per row (Network rows, then Firmware and Profile) |
+| `wifi scan` | Open the Join picker; write `NETWORK N RSSI OPEN\|SECURED SSID` per listed network (hidden ones are left out) |
+| `wifi connect N [PASSPHRASE]` | Join scanned network `N` (after `wifi scan`); the passphrase is the rest of the line, spaces included |
+| `wifi join SSID [PASSPHRASE]` | Join any network by name, hidden ones included. Without a passphrase, the saved network keeps its stored one; another network is joined as open |
+| `wifi cancel` | Leave the Join picker |
+| `dump hosts\|entries\|drives\|catalogue\|network\|status`, `dump slot N` | Write state to the transcript (`dump catalogue` writes `SLOT N RO\|RW URI` per occupied slot; `dump network` re-reads and writes the `NET` rows) |
 | `wait TICKS` | Pause (1/50 s) so the window can be inspected |
 | `quit` | Stop |
 
@@ -143,6 +214,7 @@ failed, and 5 otherwise.
 | --- | --- |
 | `amiga_ctl.c` | Controller over the portable `config_nio` state and store |
 | `amiga_script.c` | `SCRIPT=` interpreter |
+| `amiga_net.c` | Configuration window rows and the Wi-Fi Join flow over `fn_wifi_*` |
 | `amiga_list.c`, `amiga_layout.c`, `amiga_theme.c`, `amiga_input.c`, `amiga_format.c`, `amiga_options.c`, `amiga_drives.c` | Pure helpers |
 | `amiga_gui.c` | Intuition window, gadgets, menus and rendering (V33 API) |
 | `amiga_main.c`, `amiga_exec.c`, `amiga_stack.c` | Process start-up, command execution, stack size |

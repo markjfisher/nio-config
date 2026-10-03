@@ -3,6 +3,7 @@
 
 #include "config_nio.h"
 #include "amiga_list.h"
+#include "fujinet-nio.h"
 
 typedef enum {
   AMIGA_PAGE_HOSTS = 0,
@@ -21,6 +22,35 @@ typedef enum {
 #define AMIGA_CAT_URI_MAX 63   /* tail of each address kept for the list */
 
 #define AMIGA_CMD_OUT_MAX 80
+
+#define AMIGA_NET_SCAN_MAX FN_WIFI_MAX_SCAN_RECORDS
+#define AMIGA_NET_ROWS 12
+
+/* What the Configuration window shows: its Device and Network tabs, and
+ * the Join picker that Network > Join... opens in place of its rows. */
+enum {
+  AMIGA_NET_VIEW_DEVICE = 0,
+  AMIGA_NET_VIEW_NETWORK,
+  AMIGA_NET_VIEW_JOIN
+};
+
+/* Configuration window data, re-read by amiga_ctl_net_refresh.  A have_*
+ * flag is clear when that request failed; the rows then show "Unknown". */
+typedef struct {
+  uint8_t have_status;
+  uint8_t have_config;
+  uint8_t have_adapter;
+  uint8_t adapter_error;   /* FN_ERR_UNSUPPORTED: firmware predates it */
+  uint8_t have_info;
+  uint8_t info_error;      /* FN_ERR_UNSUPPORTED: firmware predates it */
+  fn_wifi_status_t status;
+  fn_wifi_config_t config;
+  fn_wifi_adapter_info_t adapter;   /* Wi-Fi GET_ADAPTER_INFO: the MAC */
+  fn_fuji_info_t info;              /* FujiDevice GetInfo: firmware, profile */
+  uint8_t scan_count;
+  fn_wifi_scan_record_t scan[AMIGA_NET_SCAN_MAX];
+  uint8_t view;            /* AMIGA_NET_VIEW_* */
+} amiga_net_t;
 
 /* Runs a Shell command (FMOUNT/FUMOUNT) and returns its return code; the
  * command's last non-empty output line is copied to `output`. */
@@ -83,6 +113,9 @@ typedef struct {
   uint8_t help_topic;
   uint8_t help_return;
   amiga_list_t help;   /* help lines (topic text) or titles (Contents) */
+  amiga_list_t netinfo;    /* Configuration window rows (Device/Network) */
+  amiga_list_t networks;   /* Join picker: scanned networks */
+  amiga_net_t net;
 } amiga_ctl_t;
 
 void amiga_ctl_init(amiga_ctl_t *ctl, config_nio_state_t *state,

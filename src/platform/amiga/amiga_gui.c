@@ -12,6 +12,7 @@
 #include "amiga_input.h"
 #include "amiga_layout.h"
 #include "amiga_logo.h"
+#include "amiga_net.h"
 #include "amiga_script.h"
 #include "amiga_theme.h"
 
@@ -171,16 +172,18 @@ static char tmp_text[CONFIG_NIO_URI_MAX + ROW_TEXT_MAX + 32];
 static char uri_text[CONFIG_NIO_URI_MAX + 1];
 /* ---- Menus ------------------------------------------------------------ */
 
-static struct IntuiText menu_text[6 + AMIGA_HELP_TOPICS];
+static struct IntuiText menu_text[7 + AMIGA_HELP_TOPICS];
 static struct MenuItem project_items[2];
-static struct MenuItem settings_items[4];
+static struct MenuItem settings_items[5];
 static struct MenuItem help_items[AMIGA_HELP_TOPICS];
 static struct Menu menus[3];
 static const char *const project_labels[2] = { "About...", "Quit" };
 static const char project_keys[2] = { '?', 'Q' };
-static const char *const settings_labels[4] = {
-  "Dates YY-MM-DD", "Dates YY-DD-MM", "Sizes Full", "Sizes Compact"
+static const char *const settings_labels[5] = {
+  "Dates YY-MM-DD", "Dates YY-DD-MM", "Sizes Full", "Sizes Compact",
+  "Configure"
 };
+#define SETTINGS_CONFIGURE 4   /* opens the Configuration window */
 static uint8_t menus_attached;
 
 /* ---- Small drawing helpers ------------------------------------------- */
@@ -973,6 +976,1070 @@ static void catalogue_reselect(uint8_t slot)
 /* Digits typed on the slot list. */
 static amiga_typeahead_t slot_typing;
 
+/* ---- Join window -------------------------------------------------------- */
+
+enum { PW_SSID = 1, PW_PASS, PW_JOIN, PW_CANCEL };
+
+/* What the Join window returns; the passphrase is wiped once Join has
+ * used it. */
+static UBYTE join_ssid[FN_WIFI_MAX_SSID + 1];
+static UBYTE join_ssid_undo[FN_WIFI_MAX_SSID + 1];
+static UBYTE join_pass[AMIGA_NET_PASS_MAX + 1];
+static UBYTE join_pass_undo[AMIGA_NET_PASS_MAX + 1];
+
+/* Layout of the Join window's interior, from its real borders. */
+typedef struct {
+  amiga_rect_t ssid_label, ssid, pass_label, pass, note, join, cancel;
+  int16_t width, height;
+} join_layout_t;
+
+static void join_layout(join_layout_t *l, uint8_t bl, uint8_t bt, uint8_t br,
+                        uint8_t bb)
+{
+  int16_t cw = 46 * FONT_W;
+  int16_t x0 = (int16_t) (bl + AMIGA_LAYOUT_PAD);
+  int16_t y = (int16_t) (bt + AMIGA_LAYOUT_PAD);
+  int16_t label_w = 11 * FONT_W;
+  int16_t str_h = layout.edit.height;
+  int16_t btn_w = 12 * FONT_W;
+  int16_t btn_h = FONT_H + 6;
+  int i;
+
+  for (i = 0; i < 2; i++) {
+    amiga_rect_t *field = i ? &l->pass : &l->ssid;
+    amiga_rect_t *label = i ? &l->pass_label : &l->ssid_label;
+
+    field->left = (int16_t) (x0 + label_w); field->top = y;
+    field->width = (int16_t) (cw - label_w); field->height = str_h;
+    label->left = x0; label->top = (int16_t) (y + (str_h - FONT_H) / 2);
+    label->width = label_w; label->height = FONT_H;
+    y = (int16_t) (y + str_h + AMIGA_LAYOUT_GAP);
+  }
+  l->note.left = x0; l->note.top = y; l->note.width = cw;
+  l->note.height = FONT_H + 2;
+  y = (int16_t) (y + l->note.height + AMIGA_LAYOUT_GAP);
+  l->join.left = x0; l->join.top = y; l->join.width = btn_w;
+  l->join.height = btn_h;
+  l->cancel = l->join;
+  l->cancel.left = (int16_t) (x0 + cw - btn_w);
+  y = (int16_t) (y + btn_h + AMIGA_LAYOUT_PAD);
+  l->width = (int16_t) (x0 + cw + AMIGA_LAYOUT_PAD + br);
+  l->height = (int16_t) (y + bb);
+}
+
+/* The drawing helpers paint into `win`; point it at the Join window. */
+static void join_paint_note(struct Window *jw, const join_layout_t *l,
+                            const char *note, uint8_t pen)
+{
+  struct Window *main_win = win;
+
+  win = jw;
+  fill(&l->note, theme.background);
+  text_at(l->note.left, (WORD) (l->note.top + 1), note, (WORD) strlen(note),
+          pen);
+  win = main_win;
+}
+
+static void join_paint(struct Window *jw, const join_layout_t *l,
+                       const char *ssid, const char *note)
+{
+  struct Window *main_win = win;
+  amiga_rect_t inner;
+  const amiga_rect_t *btn[2];
+  static const char *const labels[2] = { "Join", "Cancel" };
+  int i;
+
+  win = jw;
+  inner.left = (int16_t) jw->BorderLeft;
+  inner.top = (int16_t) jw->BorderTop;
+  inner.width = (int16_t) (jw->Width - jw->BorderLeft - jw->BorderRight);
+  inner.height = (int16_t) (jw->Height - jw->BorderTop - jw->BorderBottom);
+  fill(&inner, theme.background);
+  text_at(l->ssid_label.left, l->ssid_label.top, "Network", 7, theme.text);
+  if (ssid)   /* a listed network: its name, not a field */
+    text_at(l->ssid.left, l->ssid_label.top, ssid, (WORD) strlen(ssid),
+            theme.highlight);
+  else
+    bevel(&l->ssid, 1);
+  text_at(l->pass_label.left, l->pass_label.top, "Passphrase", 10,
+          theme.text);
+  bevel(&l->pass, 1);
+  btn[0] = &l->join;
+  btn[1] = &l->cancel;
+  for (i = 0; i < 2; i++) {
+    amiga_rect_t in = amiga_rect_inset(*btn[i], 2, 1);
+
+    fill(&in, theme.background);
+    bevel(btn[i], 0);
+    text_centred(btn[i], labels[i], theme.text);
+  }
+  win = main_win;
+  join_paint_note(jw, l, note, theme.text);
+  RefreshGadgets(jw->FirstGadget, jw, NULL);
+}
+
+static void join_gadget(struct Gadget *g, amiga_rect_t r, UWORD type,
+                        UWORD id, struct StringInfo *si)
+{
+  if (si)
+    r = amiga_rect_inset(r, 4, 3);
+  memset(g, 0, sizeof(*g));
+  g->LeftEdge = r.left; g->TopEdge = r.top;
+  g->Width = r.width; g->Height = r.height;
+  g->Flags = GADGHCOMP;
+  g->Activation = RELVERIFY;
+  g->GadgetType = type;
+  g->GadgetID = id;
+  g->SpecialInfo = (APTR) si;
+}
+
+/* The saved network with a stored passphrase: Join may keep it. */
+static int join_saved(const char *ssid)
+{
+  const amiga_net_t *n = &gctl->net;
+
+  return n->have_config && n->config.password_present &&
+         strcmp(n->config.ssid, ssid) == 0;
+}
+
+/* Whether the Join window's network is secured: a listed network says so;
+ * one typed in (Other...) is secured when it has a passphrase, typed now
+ * or stored. */
+static uint8_t join_secured(int listed_auth)
+{
+  if (listed_auth >= 0)
+    return (uint8_t) (listed_auth != 0);
+  return (uint8_t) (join_pass[0] || join_saved((const char *) join_ssid));
+}
+
+/* Asks for a network's passphrase (and, for Other..., its name: ssid
+ * NULL) in its own window, with the main window blocked.  Returns 1 with
+ * join_ssid and join_pass filled when the user joins. */
+static int gui_ask_join(const char *ssid)
+{
+  const char *note = !ssid ? "Leave the passphrase empty for an open network."
+                     : join_saved(ssid)
+                       ? "Leave it empty to keep the saved passphrase."
+                       : "8 to 64 characters.";
+  struct Window *jw;
+  struct NewWindow nw;
+  struct Gadget g[4];
+  struct StringInfo ssid_si;
+  struct StringInfo pass_si;
+  struct Gadget *first;
+  join_layout_t l;
+  int result = -1;
+
+  memset(join_ssid, 0, sizeof(join_ssid));
+  memset(join_ssid_undo, 0, sizeof(join_ssid_undo));
+  memset(join_pass, 0, sizeof(join_pass));
+  memset(join_pass_undo, 0, sizeof(join_pass_undo));
+  if (ssid)
+    strncpy((char *) join_ssid, ssid, sizeof(join_ssid) - 1);
+  /* Same screen and window flags as the main window, so same borders. */
+  join_layout(&l, (uint8_t) win->BorderLeft, (uint8_t) win->BorderTop,
+              (uint8_t) win->BorderRight, (uint8_t) win->BorderBottom);
+
+  memset(&ssid_si, 0, sizeof(ssid_si));
+  ssid_si.Buffer = join_ssid;
+  ssid_si.UndoBuffer = join_ssid_undo;
+  ssid_si.MaxChars = sizeof(join_ssid);
+  memset(&pass_si, 0, sizeof(pass_si));
+  pass_si.Buffer = join_pass;
+  pass_si.UndoBuffer = join_pass_undo;
+  pass_si.MaxChars = sizeof(join_pass);
+  join_gadget(&g[0], l.ssid, STRGADGET, PW_SSID, &ssid_si);
+  join_gadget(&g[1], l.pass, STRGADGET, PW_PASS, &pass_si);
+  join_gadget(&g[2], l.join, BOOLGADGET, PW_JOIN, NULL);
+  join_gadget(&g[3], l.cancel, BOOLGADGET, PW_CANCEL, NULL);
+  g[0].NextGadget = &g[1];
+  g[1].NextGadget = &g[2];
+  g[2].NextGadget = &g[3];
+  /* A listed network's name is fixed: no Network field. */
+  first = ssid ? &g[1] : &g[0];
+
+  memset(&nw, 0, sizeof(nw));
+  nw.Width = l.width;
+  nw.Height = l.height;
+  nw.LeftEdge = (WORD) (win->LeftEdge + (win->Width - l.width) / 2);
+  nw.TopEdge = (WORD) (win->TopEdge + (win->Height - l.height) / 2);
+  if (nw.LeftEdge < 0)
+    nw.LeftEdge = 0;
+  if (nw.TopEdge < 0)
+    nw.TopEdge = 0;
+  nw.DetailPen = (UBYTE) -1;
+  nw.BlockPen = (UBYTE) -1;
+  nw.IDCMPFlags = CLOSEWINDOW | GADGETUP | RAWKEY;
+  nw.Flags = WINDOWDRAG | WINDOWDEPTH | WINDOWCLOSE | ACTIVATE |
+             SMART_REFRESH | NOCAREREFRESH;
+  nw.FirstGadget = first;
+  nw.Title = (UBYTE *) (ssid ? "Join Wi-Fi Network" : "Join Other Network");
+  nw.Type = WBENCHSCREEN;
+
+  busy_begin();
+  jw = OpenWindow(&nw);
+  if (!jw) {
+    busy_end();
+    config_nio_set_status(gctl->state, "Unable to open the Join window");
+    return 0;
+  }
+  if (font)
+    SetFont(jw->RPort, font);
+  join_paint(jw, &l, ssid, note);
+  (void) ActivateGadget(first, jw, NULL);
+
+  while (result < 0) {
+    struct IntuiMessage *msg;
+
+    WaitPort(jw->UserPort);
+    while ((msg = (struct IntuiMessage *) GetMsg(jw->UserPort)) != NULL) {
+      ULONG cls = msg->Class;
+      UWORD code = msg->Code;
+      UWORD qual = msg->Qualifier;
+      UWORD id = cls == GADGETUP ? ((struct Gadget *) msg->IAddress)->GadgetID
+                                 : 0;
+      int accept = 0;
+
+      ReplyMsg((struct Message *) msg);
+      if (result >= 0)
+        continue;
+      if (cls == CLOSEWINDOW || id == PW_CANCEL) {
+        result = 0;
+      } else if (id == PW_SSID) {
+        (void) ActivateGadget(&g[1], jw, NULL);   /* Return: to Passphrase */
+      } else if (id == PW_JOIN || id == PW_PASS) {
+        accept = 1;   /* Return in Passphrase, or the Join button */
+      } else if (cls == RAWKEY) {
+        amiga_key_t key = amiga_key_from_raw(code, qual);
+
+        if (key == AMIGA_KEY_CANCEL)
+          result = 0;
+        else if (key == AMIGA_KEY_ACTIVATE)
+          accept = 1;
+      }
+      if (accept) {
+        const char *problem = NULL;
+
+        if (!join_ssid[0])
+          problem = "Type the network's name.";
+        else
+          problem = amiga_net_pass_problem(
+            join_secured(ssid ? 1 : -1),
+            (uint16_t) strlen((const char *) join_pass),
+            (uint8_t) join_saved((const char *) join_ssid));
+        if (problem) {
+          join_paint_note(jw, &l, problem, theme.highlight);
+          (void) ActivateGadget(join_ssid[0] ? &g[1] : first, jw, NULL);
+        } else {
+          result = 1;
+        }
+      }
+    }
+  }
+  CloseWindow(jw);
+  busy_end();
+  memset(join_ssid_undo, 0, sizeof(join_ssid_undo));
+  memset(join_pass_undo, 0, sizeof(join_pass_undo));
+  if (!result)
+    memset(join_pass, 0, sizeof(join_pass));
+  return result;
+}
+
+/* ---- Configuration window ------------------------------------------------ */
+
+/* Settings > Configure opens this window over the main one, which stays
+ * blocked until it closes.  While it is open `win` points at it, so the
+ * drawing helpers, busy state, requesters and the Join window use it. */
+
+enum {
+  CFG_TAB0 = 0,
+  CFG_LIST = CFG_TAB0 + AMIGA_CFG_TAB_COUNT,
+  CFG_PROP,
+  CFG_BTN0
+};
+#define CFG_GID_COUNT (CFG_BTN0 + AMIGA_CFG_BUTTON_COUNT)
+
+enum {
+  CA_NONE = 0,
+  CA_REFRESH,
+  CA_JOIN_BEGIN,
+  CA_JOIN,
+  CA_RESCAN,
+  CA_OTHER,
+  CA_CANCEL,
+  CA_HELP_BACK,
+  CA_CLOSE
+};
+
+static const char *const cfg_tab_labels[AMIGA_CFG_TAB_COUNT] = {
+  "Device", "Network"
+};
+
+/* Per view (AMIGA_NET_VIEW_*), then the help shown over any of them;
+ * Close is on every one. */
+#define CFG_HELP_BUTTONS 3
+static const gui_button_t cfg_buttons[4][AMIGA_CFG_BUTTON_COUNT] = {
+  { { "Refresh", CA_REFRESH }, { NULL, CA_NONE }, { NULL, CA_NONE },
+    { NULL, CA_NONE }, { "Close", CA_CLOSE } },
+  { { "Refresh", CA_REFRESH }, { "Join...", CA_JOIN_BEGIN },
+    { NULL, CA_NONE }, { NULL, CA_NONE }, { "Close", CA_CLOSE } },
+  { { "Join", CA_JOIN }, { "Rescan", CA_RESCAN }, { "Other...", CA_OTHER },
+    { "Cancel", CA_CANCEL }, { "Close", CA_CLOSE } },
+  { { "Back", CA_HELP_BACK }, { NULL, CA_NONE }, { NULL, CA_NONE },
+    { NULL, CA_NONE }, { "Close", CA_CLOSE } }
+};
+
+static amiga_cfg_layout_t cfg;
+static struct Gadget cfg_gad[CFG_GID_COUNT];
+static struct PropInfo cfg_pi;
+static struct Image cfg_knob;
+static uint8_t cfg_prop_active;
+static amiga_list_t cfg_device;   /* the Device tab's rows */
+static ULONG cfg_last_secs;
+static ULONG cfg_last_micros;
+static uint16_t cfg_last_index = AMIGA_LIST_NONE;
+/* Help pressed in this window shows the Configuration topic in its list,
+ * over the current tab, until Back. */
+static uint8_t cfg_help;
+static uint8_t cfg_help_topic;
+static amiga_list_t cfg_help_list;
+
+static const gui_button_t *cfg_button(uint8_t i)
+{
+  return &cfg_buttons[cfg_help ? CFG_HELP_BUTTONS : gctl->net.view][i];
+}
+
+static amiga_list_t *cfg_list(void)
+{
+  if (cfg_help)
+    return &cfg_help_list;
+  switch (gctl->net.view) {
+  case AMIGA_NET_VIEW_DEVICE:
+    return &cfg_device;
+  case AMIGA_NET_VIEW_JOIN:
+    return &gctl->networks;
+  default:
+    /* The controller counts every row; this tab shows the network ones. */
+    amiga_list_set_count(&gctl->netinfo, AMIGA_NET_NETWORK_ROWS);
+    return &gctl->netinfo;
+  }
+}
+
+static amiga_rect_t cfg_list_interior(void)
+{
+  return amiga_rect_inset(cfg.list, 2, 2);
+}
+
+static uint8_t cfg_cols(void)
+{
+  int cols = (cfg_list_interior().width - 4) / FONT_W;
+
+  return (uint8_t) (cols > ROW_TEXT_MAX ? ROW_TEXT_MAX : cols);
+}
+
+/* Join picker: the network name takes what the signal and security
+ * columns leave (" [bars]  Excellent Secured" is 23 columns). */
+static uint8_t cfg_ssid_cols(void)
+{
+  uint8_t cols = cfg_cols();
+  uint8_t w = (uint8_t) (cols > 28 ? cols - 28 : 1);
+
+  return w > FN_WIFI_MAX_SSID ? FN_WIFI_MAX_SSID : w;
+}
+
+static void cfg_paint_tabs(void)
+{
+  uint8_t tab = gctl->net.view == AMIGA_NET_VIEW_DEVICE ? 0 : 1;
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_CFG_TAB_COUNT; i++) {
+    int selected = i == tab;
+    amiga_rect_t in = amiga_rect_inset(cfg.tab[i], 2, 1);
+
+    fill(&in, selected ? theme.fill : theme.background);
+    bevel(&cfg.tab[i], selected);
+    text_centred(&cfg.tab[i], cfg_tab_labels[i],
+                 selected ? theme.filltext : theme.text);
+  }
+}
+
+static void cfg_paint_info(void)
+{
+  fill(&cfg.info, theme.background);
+  switch (cfg_help ? 0xFF : gctl->net.view) {
+  case 0xFF:
+    amiga_sprintf(tmp_text, "Help: %s", amiga_help_title(cfg_help_topic));
+    break;
+  case AMIGA_NET_VIEW_DEVICE:
+    strcpy(tmp_text, "FujiNet device");
+    break;
+  case AMIGA_NET_VIEW_JOIN: {
+    /* Column heads over the rows' name, signal and security columns. */
+    uint8_t w = cfg_ssid_cols();
+
+    strcpy(tmp_text, padded("Network", w));
+    strcat(tmp_text, padded(" Signal", 16));
+    strcat(tmp_text, "Security");
+    break;
+  }
+  default:
+    strcpy(tmp_text, "Wi-Fi and network settings");
+    break;
+  }
+  text_at(cfg.info.left, (WORD) (cfg.info.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.highlight);
+}
+
+/* Signal icon: AMIGA_NET_BARS rising bars, `level` of them lit, bottom
+ * aligned with the text drawn at `top`. */
+static void cfg_draw_bars(WORD x, WORD top, uint8_t level, int selected)
+{
+  struct RastPort *rp = win->RPort;
+  /* Unlit bars need a pen apart from the text: the light shine pen on
+   * 2.0+, the shadow pen on 1.3, where shine and text are both white. */
+  uint8_t lit = selected ? theme.filltext : theme.text;
+  uint8_t dim = selected ? theme.background
+                         : (theme.shine != theme.text ? theme.shine
+                                                      : theme.shadow);
+  WORD bottom = (WORD) (top + FONT_H - 1);
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_NET_BARS; i++) {
+    WORD left = (WORD) (x + i * 6);
+    WORD height = (WORD) (2 * (i + 1));
+
+    SetAPen(rp, i < level ? lit : dim);
+    RectFill(rp, left, (WORD) (bottom - height + 1), (WORD) (left + 3), bottom);
+  }
+}
+
+static void cfg_paint_rows(void)
+{
+  amiga_list_t *l = cfg_list();
+  amiga_rect_t in = cfg_list_interior();
+  uint8_t cols = cfg_cols();
+  int join = !cfg_help && gctl->net.view == AMIGA_NET_VIEW_JOIN;
+  int bars;
+  uint8_t bars_col = 0;
+  uint8_t r;
+
+  for (r = 0; r < cfg.list_rows; r++) {
+    amiga_rect_t row;
+    uint16_t idx = (uint16_t) (l->top + r);
+    /* Only the picker's rows and help Contents are chosen from. */
+    int selected = (join || (cfg_help &&
+                             cfg_help_topic == AMIGA_HELP_CONTENTS)) &&
+                   idx == l->selected;
+
+    row.left = in.left;
+    row.top = (int16_t) (in.top + r * cfg.row_h);
+    row.width = in.width;
+    row.height = cfg.row_h;
+    if (idx >= l->count) {
+      fill(&row, theme.background);
+      continue;
+    }
+    fill(&row, selected ? theme.fill : theme.background);
+    bars = -1;
+    if (cfg_help && cfg_help_topic == AMIGA_HELP_CONTENTS) {
+      amiga_sprintf(tmp_text, "  %s", amiga_help_title((uint8_t) (idx + 1)));
+    } else if (cfg_help) {
+      const amiga_help_line_t *hl = &help_lines[idx];
+
+      memset(tmp_text, ' ', hl->indent);
+      memcpy(tmp_text + hl->indent,
+             amiga_help_text(cfg_help_topic) + hl->start, hl->len);
+      tmp_text[hl->indent + hl->len] = 0;
+    } else if (join)
+      bars = amiga_net_scan_row_display(&gctl->net.scan[idx], cfg_ssid_cols(),
+                                        tmp_text, &bars_col);
+    else if (gctl->net.view == AMIGA_NET_VIEW_DEVICE)
+      amiga_net_row_text(&gctl->net, (uint16_t) (AMIGA_NET_NETWORK_ROWS + idx),
+                         tmp_text);
+    else
+      bars = amiga_net_row_display(&gctl->net, idx, tmp_text, &bars_col);
+    text_at((WORD) (row.left + 2), (WORD) (row.top + 1), padded(tmp_text, cols),
+            cols, selected ? theme.filltext : theme.text);
+    /* The row text leaves blank columns where the icon goes. */
+    if (bars >= 0 && bars_col + AMIGA_NET_BARS_COLS <= cols)
+      cfg_draw_bars((WORD) (row.left + 2 + bars_col * FONT_W + 1),
+                    (WORD) (row.top + 1), (uint8_t) bars, selected);
+  }
+}
+
+static void cfg_paint_buttons(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_CFG_BUTTON_COUNT; i++) {
+    const gui_button_t *b = cfg_button(i);
+    amiga_rect_t in = amiga_rect_inset(cfg.button[i], 2, 1);
+
+    fill(&cfg.button[i], theme.background);
+    if (!b->label)
+      continue;
+    fill(&in, theme.background);
+    bevel(&cfg.button[i], 0);
+    text_centred(&cfg.button[i], b->label, theme.text);
+  }
+}
+
+static void cfg_paint_status(void)
+{
+  amiga_rect_t in = amiga_rect_inset(cfg.status, 2, 1);
+  uint8_t cols = (uint8_t) ((in.width - 8) / FONT_W);
+
+  fill(&in, theme.background);
+  bevel(&cfg.status, 1);
+  amiga_clip_head(tmp_text, sizeof(tmp_text), gctl->state->status, cols);
+  text_at((WORD) (in.left + 4), (WORD) (in.top + 1), tmp_text,
+          (WORD) strlen(tmp_text), theme.text);
+}
+
+static void cfg_update_prop(void)
+{
+  uint16_t pot;
+  uint16_t body;
+
+  amiga_list_prop(cfg_list(), &pot, &body);
+  NewModifyProp(&cfg_gad[CFG_PROP], win, NULL, cfg_pi.Flags, 0, pot, MAXBODY,
+                body, 1);
+}
+
+static void cfg_paint(void)
+{
+  amiga_rect_t inner;
+
+  inner.left = (int16_t) win->BorderLeft;
+  inner.top = (int16_t) win->BorderTop;
+  inner.width = (int16_t) (win->Width - win->BorderLeft - win->BorderRight);
+  inner.height = (int16_t) (win->Height - win->BorderTop - win->BorderBottom);
+  fill(&inner, theme.background);
+  cfg_paint_tabs();
+  cfg_paint_info();
+  bevel(&cfg.list, 1);
+  cfg_paint_rows();
+  cfg_paint_buttons();
+  cfg_paint_status();
+  RefreshGadgets(win->FirstGadget, win, NULL);
+  cfg_update_prop();
+}
+
+/* After a join: wait up to 10 seconds for the FujiNet to connect or give
+ * up, then report which. */
+static void cfg_wait_join(const char *ssid)
+{
+  int tries;
+
+  cfg_paint_status();
+  for (tries = 0; tries < 20; tries++) {
+    uint8_t link;
+
+    Delay(25);
+    link = amiga_ctl_net_poll(gctl);
+    if (link == 2 || link == 3 || link == 0xFF)
+      break;
+  }
+  (void) amiga_ctl_net_join_result(gctl, ssid);
+}
+
+/* Asks first where an action needs it; 0 means the user backed out. */
+static int cfg_confirm(uint8_t action)
+{
+  const amiga_net_t *n = &gctl->net;
+  uint16_t sel = gctl->networks.selected;
+
+  memset(join_pass, 0, sizeof(join_pass));
+  if (action == CA_OTHER)
+    return gui_ask_join(NULL);
+  if (action != CA_JOIN || sel >= n->scan_count)
+    return 1;
+  /* A secured network asks for its passphrase; the window is also the
+   * confirmation. */
+  if (n->scan[sel].auth)
+    return gui_ask_join(n->scan[sel].ssid);
+  /* Joining another (open) network drops the current one meanwhile. */
+  if (!n->have_config || !n->config.ssid[0] ||
+      strcmp(n->scan[sel].ssid, n->config.ssid) == 0)
+    return 1;
+  amiga_sprintf(tmp_text, "Join %.32s?\nThe FujiNet leaves %.32s and\n"
+                "reconnects; hosts pause until it does.",
+                n->scan[sel].ssid, n->config.ssid);
+  return confirm(tmp_text);
+}
+
+static void cfg_do_action(uint8_t action)
+{
+  uint8_t old_view = gctl->net.view;
+  char ssid[FN_WIFI_MAX_SSID + 1];
+
+  if (action == CA_NONE || !cfg_confirm(action))
+    return;
+  busy_begin();
+  switch (action) {
+  case CA_REFRESH:
+    (void) amiga_ctl_net_refresh(gctl);
+    break;
+  case CA_JOIN_BEGIN:
+    if (amiga_ctl_wifi_begin(gctl) && gctl->net.scan_count)
+      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    break;
+  case CA_RESCAN:
+    if (amiga_ctl_wifi_rescan(gctl) && gctl->net.scan_count)
+      amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    break;
+  case CA_CANCEL:
+    amiga_ctl_wifi_cancel(gctl);
+    break;
+  case CA_HELP_BACK:
+    cfg_help = 0;
+    config_nio_set_status(gctl->state, "");
+    break;
+  case CA_JOIN: {
+    uint16_t sel = gctl->networks.selected;
+    int joined;
+
+    if (sel >= gctl->net.scan_count) {
+      config_nio_set_status(gctl->state, "Choose a network first");
+      break;
+    }
+    strcpy(ssid, gctl->net.scan[sel].ssid);
+    joined = amiga_ctl_wifi_commit(gctl, sel, (const char *) join_pass);
+    memset(join_pass, 0, sizeof(join_pass));
+    if (joined) {
+      cfg_paint();   /* back on the Network tab while it connects */
+      cfg_wait_join(ssid);
+    }
+    break;
+  }
+  case CA_OTHER: {
+    int joined;
+
+    strcpy(ssid, (const char *) join_ssid);
+    joined = amiga_ctl_wifi_join(gctl, ssid, (const char *) join_pass,
+                                 join_secured(-1));
+    memset(join_pass, 0, sizeof(join_pass));
+    if (joined) {
+      amiga_ctl_wifi_cancel(gctl);   /* back to the Network tab */
+      cfg_paint();
+      cfg_wait_join(ssid);
+    }
+    break;
+  }
+  default:
+    break;
+  }
+  busy_end();
+  if (gctl->net.view != old_view || action == CA_HELP_BACK) {
+    cfg_paint();
+  } else {
+    cfg_paint_rows();
+    cfg_paint_status();
+    cfg_update_prop();
+  }
+}
+
+/* Help in this window: a topic wrapped to its list, or Contents (the
+ * other topics' titles, to choose from). */
+static void cfg_open_help(uint8_t topic)
+{
+  cfg_help_topic = topic;
+  amiga_list_init(&cfg_help_list, cfg.list_rows);
+  if (topic == AMIGA_HELP_CONTENTS) {
+    amiga_list_set_count(&cfg_help_list, AMIGA_HELP_TOPICS - 1);
+    amiga_list_select(&cfg_help_list, 0);
+    config_nio_set_status(gctl->state,
+                          "Double-click a topic to read it; Back returns");
+  } else {
+    amiga_list_set_count(&cfg_help_list,
+                         amiga_help_layout(amiga_help_text(topic), cfg_cols(),
+                                           help_lines, HELP_LINES_MAX));
+    config_nio_set_status(gctl->state, "Back or Esc returns to the settings");
+  }
+  cfg_help = 1;
+  cfg_paint();
+}
+
+static void cfg_set_view(uint8_t view)
+{
+  if (cfg_help) {
+    cfg_help = 0;
+    config_nio_set_status(gctl->state, "");
+    if (view == gctl->net.view) {
+      cfg_paint();
+      return;
+    }
+  }
+  if (view == gctl->net.view)
+    return;
+  amiga_ctl_wifi_cancel(gctl);   /* leaving the picker */
+  gctl->net.view = view;
+  cfg_paint();
+}
+
+/* Return / double-click: Join in the picker, else Refresh. */
+static void cfg_activate(void)
+{
+  if (cfg_help) {
+    if (cfg_help_topic == AMIGA_HELP_CONTENTS &&
+        cfg_help_list.selected < cfg_help_list.count)
+      cfg_open_help((uint8_t) (cfg_help_list.selected + 1));
+    return;
+  }
+  cfg_do_action(gctl->net.view == AMIGA_NET_VIEW_JOIN ? CA_JOIN : CA_REFRESH);
+}
+
+static void cfg_select(uint16_t index)
+{
+  amiga_list_select(cfg_list(), index);
+  cfg_paint_rows();
+  if (!cfg_help && gctl->net.view == AMIGA_NET_VIEW_JOIN) {
+    amiga_ctl_wifi_hint(gctl, gctl->networks.selected);
+    cfg_paint_status();
+  }
+  cfg_update_prop();
+}
+
+static void cfg_list_click(struct IntuiMessage *msg)
+{
+  amiga_rect_t in = cfg_list_interior();
+  uint16_t index;
+
+  int choosing = cfg_help ? cfg_help_topic == AMIGA_HELP_CONTENTS
+                         : gctl->net.view == AMIGA_NET_VIEW_JOIN;
+
+  if (!choosing ||
+      !amiga_list_hit(cfg_list(), (int16_t) (msg->MouseY - in.top), cfg.row_h,
+                      &index))
+    return;
+  if (index == cfg_last_index &&
+      DoubleClick(cfg_last_secs, cfg_last_micros, msg->Seconds, msg->Micros)) {
+    cfg_last_index = AMIGA_LIST_NONE;
+    cfg_select(index);
+    cfg_activate();
+    return;
+  }
+  cfg_last_index = index;
+  cfg_last_secs = msg->Seconds;
+  cfg_last_micros = msg->Micros;
+  cfg_select(index);
+}
+
+/* Returns 1 when the window should close. */
+static int cfg_handle_key(UWORD code, UWORD qualifier)
+{
+  amiga_list_t *l = cfg_list();
+  amiga_key_t key = amiga_key_from_raw(code, qualifier);
+
+  if (key == AMIGA_KEY_HELP) {
+    if (!cfg_help)
+      cfg_open_help(amiga_help_find("Configuration"));
+    return 0;
+  }
+  if (cfg_help && key == AMIGA_KEY_CANCEL) {
+    cfg_do_action(CA_HELP_BACK);
+    return 0;
+  }
+  /* Help text has no selection: the movement keys scroll it. */
+  if (cfg_help && cfg_help_topic != AMIGA_HELP_CONTENTS) {
+    int32_t max_top = l->count > l->rows ? l->count - l->rows : 0;
+    int32_t top = l->top;
+
+    switch (key) {
+    case AMIGA_KEY_UP: top -= 1; break;
+    case AMIGA_KEY_DOWN: top += 1; break;
+    case AMIGA_KEY_PAGE_UP: top -= l->rows; break;
+    case AMIGA_KEY_PAGE_DOWN: top += l->rows; break;
+    case AMIGA_KEY_TOP: top = 0; break;
+    case AMIGA_KEY_BOTTOM: top = max_top; break;
+    case AMIGA_KEY_CANCEL:
+      cfg_do_action(CA_HELP_BACK);
+      return 0;
+    default:
+      return 0;
+    }
+    l->top = (uint16_t) (top < 0 ? 0 : (top > max_top ? max_top : top));
+    cfg_paint_rows();
+    cfg_update_prop();
+    return 0;
+  }
+  switch (key) {
+  case AMIGA_KEY_UP:
+    amiga_list_move(l, -1);
+    break;
+  case AMIGA_KEY_DOWN:
+    amiga_list_move(l, 1);
+    break;
+  case AMIGA_KEY_PAGE_UP:
+    amiga_list_move(l, (int16_t) -cfg.list_rows);
+    break;
+  case AMIGA_KEY_PAGE_DOWN:
+    amiga_list_move(l, (int16_t) cfg.list_rows);
+    break;
+  case AMIGA_KEY_TOP:
+    amiga_list_move(l, (int16_t) -l->count);
+    break;
+  case AMIGA_KEY_BOTTOM:
+    amiga_list_move(l, (int16_t) l->count);
+    break;
+  case AMIGA_KEY_ACTIVATE:
+    cfg_activate();
+    return 0;
+  case AMIGA_KEY_CANCEL:
+    if (gctl->net.view == AMIGA_NET_VIEW_JOIN) {
+      cfg_do_action(CA_CANCEL);
+      return 0;
+    }
+    return 1;
+  case AMIGA_KEY_NEXT_PAGE:
+  case AMIGA_KEY_PREV_PAGE:
+    cfg_set_view(gctl->net.view == AMIGA_NET_VIEW_DEVICE
+                   ? AMIGA_NET_VIEW_NETWORK : AMIGA_NET_VIEW_DEVICE);
+    return 0;
+  default:
+    return 0;
+  }
+  cfg_select(l->selected == AMIGA_LIST_NONE ? 0 : l->selected);
+  return 0;
+}
+
+static void cfg_make_gadget(uint8_t id, amiga_rect_t r, UWORD flags,
+                            UWORD activation, UWORD type)
+{
+  struct Gadget *g = &cfg_gad[id];
+
+  memset(g, 0, sizeof(*g));
+  g->LeftEdge = r.left;
+  g->TopEdge = r.top;
+  g->Width = r.width;
+  g->Height = r.height;
+  g->Flags = flags;
+  g->Activation = activation;
+  g->GadgetType = type;
+  g->GadgetID = id;
+  if (id > 0)
+    cfg_gad[id - 1].NextGadget = g;
+}
+
+static void cfg_make_gadgets(void)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_CFG_TAB_COUNT; i++)
+    cfg_make_gadget((uint8_t) (CFG_TAB0 + i), cfg.tab[i], GADGHCOMP,
+                    RELVERIFY, BOOLGADGET);
+  cfg_make_gadget(CFG_LIST, cfg_list_interior(), GADGHNONE, GADGIMMEDIATE,
+                  BOOLGADGET);
+  memset(&cfg_pi, 0, sizeof(cfg_pi));
+  cfg_pi.Flags = (UWORD) (AUTOKNOB | FREEVERT | (new_look ? PROPNEWLOOK : 0));
+  cfg_pi.HorizBody = MAXBODY;
+  cfg_pi.VertBody = MAXBODY;
+  cfg_make_gadget(CFG_PROP, cfg.scroller, GADGHNONE,
+                  GADGIMMEDIATE | RELVERIFY | FOLLOWMOUSE, PROPGADGET);
+  cfg_gad[CFG_PROP].GadgetRender = (APTR) &cfg_knob;
+  cfg_gad[CFG_PROP].SpecialInfo = (APTR) &cfg_pi;
+  for (i = 0; i < AMIGA_CFG_BUTTON_COUNT; i++)
+    cfg_make_gadget((uint8_t) (CFG_BTN0 + i), cfg.button[i], GADGHCOMP,
+                    RELVERIFY, BOOLGADGET);
+}
+
+/* Returns 1 when the window should close. */
+static int cfg_handle_gadget(struct Gadget *g, struct IntuiMessage *msg,
+                             int down)
+{
+  UWORD id = g->GadgetID;
+
+  if (id == CFG_PROP) {
+    cfg_prop_active = (uint8_t) down;
+    amiga_list_set_top_from_pot(cfg_list(), cfg_pi.VertPot);
+    cfg_paint_rows();
+    return 0;
+  }
+  if (id == CFG_LIST) {
+    if (down)
+      cfg_list_click(msg);
+    return 0;
+  }
+  if (down)
+    return 0;
+  if (id < CFG_TAB0 + AMIGA_CFG_TAB_COUNT) {
+    cfg_set_view(id == CFG_TAB0 ? AMIGA_NET_VIEW_DEVICE
+                                : AMIGA_NET_VIEW_NETWORK);
+  } else if (id >= CFG_BTN0 && id < CFG_GID_COUNT) {
+    uint8_t action = cfg_button((uint8_t) (id - CFG_BTN0))->action;
+
+    if (action == CA_CLOSE)
+      return 1;
+    cfg_do_action(action);
+  }
+  return 0;
+}
+
+/* The main window's menus, shared with this window.  Returns 1 to close
+ * it; *quit is set for Project > Quit. */
+static int cfg_handle_menu(UWORD code, int *quit)
+{
+  int settings = 0;
+
+  while (code != MENUNULL) {
+    struct MenuItem *item = ItemAddress(&menus[0], code);
+
+    if (!item)
+      break;
+    if (MENUNUM(code) == 0) {
+      if (ITEMNUM(code) == 0)
+        about();
+      else
+        *quit = 1;
+    } else if (MENUNUM(code) == 1) {
+      if (ITEMNUM(code) != SETTINGS_CONFIGURE)   /* already open */
+        settings = 1;
+    } else if (MENUNUM(code) == 2) {
+      cfg_open_help((uint8_t) ITEMNUM(code));
+    }
+    code = item->NextSelect;
+  }
+  if (settings) {
+    uint8_t date = (settings_items[1].Flags & CHECKED)
+                   ? CONFIG_NIO_PREF_DATE_YDM : CONFIG_NIO_PREF_DATE_YMD;
+    uint8_t size = (settings_items[3].Flags & CHECKED)
+                   ? CONFIG_NIO_PREF_SIZE_COMPACT : CONFIG_NIO_PREF_SIZE_FULL;
+
+    busy_begin();
+    (void) amiga_ctl_set_prefs(gctl, date, size);
+    busy_end();
+    cfg_paint_status();
+  }
+  return *quit;
+}
+
+/* Settings > Configure: the Configuration window, with the main window
+ * blocked until it closes.  Returns 1 when Project > Quit was chosen. */
+static int gui_open_config(void)
+{
+  int quit = 0;
+  static struct Requester main_block;
+  struct Window *main_win = win;
+  struct Window *cw;
+  struct NewWindow nw;
+  amiga_layout_in_t in;
+  struct Screen *scr = main_win->WScreen;
+  int done = 0;
+
+  in.screen_w = (uint16_t) scr->Width;
+  in.screen_h = (uint16_t) scr->Height;
+  /* Same screen and window flags as the main window, so same borders. */
+  in.border_l = (uint8_t) main_win->BorderLeft;
+  in.border_t = (uint8_t) main_win->BorderTop;
+  in.border_r = (uint8_t) main_win->BorderRight;
+  in.border_b = (uint8_t) main_win->BorderBottom;
+  in.font_w = FONT_W;
+  in.font_h = FONT_H;
+  in.gadget_font_h = FONT_H;
+  in.logo_w = 0;
+  in.logo_h = 0;
+  if (!amiga_cfg_layout_compute(&in, &cfg)) {
+    config_nio_set_status(gctl->state, "The screen is too small for Configure");
+    gui_paint_status();
+    return 0;
+  }
+  cfg_make_gadgets();
+  amiga_list_init(&cfg_device, cfg.list_rows);
+  amiga_list_set_count(&cfg_device, AMIGA_NET_DEVICE_ROWS);
+  amiga_list_set_rows(&gctl->netinfo, cfg.list_rows);
+  amiga_list_set_rows(&gctl->networks, cfg.list_rows);
+  gctl->net.view = AMIGA_NET_VIEW_DEVICE;
+  cfg_help = 0;
+  cfg_prop_active = 0;
+  cfg_last_index = AMIGA_LIST_NONE;
+
+  memset(&nw, 0, sizeof(nw));
+  nw.Width = (WORD) cfg.win_w;
+  nw.Height = (WORD) cfg.win_h;
+  nw.LeftEdge = (WORD) (main_win->LeftEdge + (main_win->Width - nw.Width) / 2);
+  nw.TopEdge = (WORD) (main_win->TopEdge + (main_win->Height - nw.Height) / 2);
+  if (nw.LeftEdge + nw.Width > scr->Width)
+    nw.LeftEdge = (WORD) (scr->Width - nw.Width);
+  if (nw.TopEdge + nw.Height > scr->Height)
+    nw.TopEdge = (WORD) (scr->Height - nw.Height);
+  if (nw.LeftEdge < 0)
+    nw.LeftEdge = 0;
+  if (nw.TopEdge < 0)
+    nw.TopEdge = 0;
+  nw.DetailPen = (UBYTE) -1;
+  nw.BlockPen = (UBYTE) -1;
+  nw.IDCMPFlags = CLOSEWINDOW | GADGETUP | GADGETDOWN | MOUSEMOVE | RAWKEY |
+                  MENUPICK;
+  nw.Flags = WINDOWDRAG | WINDOWDEPTH | WINDOWCLOSE | ACTIVATE |
+             SMART_REFRESH | NOCAREREFRESH;
+  nw.FirstGadget = &cfg_gad[0];
+  nw.Title = (UBYTE *) "Configuration";
+  nw.Type = WBENCHSCREEN;
+
+  InitRequester(&main_block);
+  (void) Request(&main_block, main_win);
+  cw = OpenWindow(&nw);
+  if (!cw) {
+    EndRequest(&main_block, main_win);
+    config_nio_set_status(gctl->state, "Unable to open the Configuration window");
+    gui_paint_status();
+    return 0;
+  }
+  if (font)
+    SetFont(cw->RPort, font);
+  /* The same menus as the main window (Intuition lets windows share a
+   * strip). */
+  if (menus_attached)
+    (void) SetMenuStrip(cw, &menus[0]);
+  win = cw;
+  config_nio_set_status(gctl->state, "Reading the FujiNet's settings...");
+  cfg_paint();
+  busy_begin();
+  (void) amiga_ctl_net_refresh(gctl);
+  busy_end();
+  cfg_paint();
+
+  while (!done) {
+    struct IntuiMessage *msg;
+
+    WaitPort(cw->UserPort);
+    while ((msg = (struct IntuiMessage *) GetMsg(cw->UserPort)) != NULL) {
+      ULONG cls = msg->Class;
+      UWORD code = msg->Code;
+      UWORD qual = msg->Qualifier;
+      struct Gadget *g = (struct Gadget *) msg->IAddress;
+      struct IntuiMessage copy = *msg;
+
+      ReplyMsg((struct Message *) msg);
+      if (done)
+        continue;
+      if (cls == CLOSEWINDOW)
+        done = 1;
+      else if (cls == GADGETDOWN)
+        done = cfg_handle_gadget(g, &copy, 1);
+      else if (cls == GADGETUP)
+        done = cfg_handle_gadget(g, &copy, 0);
+      else if (cls == MOUSEMOVE && cfg_prop_active) {
+        amiga_list_set_top_from_pot(cfg_list(), cfg_pi.VertPot);
+        cfg_paint_rows();
+      } else if (cls == RAWKEY)
+        done = cfg_handle_key(code, qual);
+      else if (cls == MENUPICK)
+        done = cfg_handle_menu(code, &quit);
+    }
+  }
+  amiga_ctl_wifi_cancel(gctl);
+  win = main_win;
+  if (menus_attached)
+    ClearMenuStrip(cw);
+  CloseWindow(cw);
+  EndRequest(&main_block, main_win);
+  amiga_ctl_set_rows(gctl, layout.list_rows);
+  gui_paint_rows();   /* Settings may have changed the date or size format */
+  gui_paint_status();
+  return quit;
+}
+
 /* ---- Actions ------------------------------------------------------------- */
 
 /* Destructive actions ask first, before the window is marked busy. */
@@ -1475,12 +2542,14 @@ static void gui_make_menus(void)
     make_item(&settings_items[i], &menu_text[2 + i], settings_labels[i],
               (WORD) (i * 10), w, (UWORD) (CHECKIT | checked),
               (LONG) (1L << (i ^ 1)), 0);
-    settings_items[i].NextItem = i + 1 < 4 ? &settings_items[i + 1] : NULL;
+    settings_items[i].NextItem = &settings_items[i + 1];
   }
+  make_item(&settings_items[SETTINGS_CONFIGURE], &menu_text[6],
+            settings_labels[SETTINGS_CONFIGURE], (WORD) (4 * 10), w, 0, 0, 0);
   /* Help menu: Contents (Right-Amiga-H), then every topic. */
   w = (WORD) (22 * FONT_W + COMMWIDTH + 8);
   for (i = 0; i < AMIGA_HELP_TOPICS; i++) {
-    make_item(&help_items[i], &menu_text[6 + i], amiga_help_title(i),
+    make_item(&help_items[i], &menu_text[7 + i], amiga_help_title(i),
               (WORD) (i * 10), w, (UWORD) (i == 0 ? COMMSEQ : 0), 0,
               (BYTE) (i == 0 ? 'H' : 0));
     help_items[i].NextItem = i + 1 < AMIGA_HELP_TOPICS ? &help_items[i + 1]
@@ -1515,6 +2584,7 @@ static int gui_handle_menu(UWORD code)
 {
   int quit = 0;
   int settings = 0;
+  int configure = 0;
 
   while (code != MENUNULL) {
     struct MenuItem *item = ItemAddress(&menus[0], code);
@@ -1527,7 +2597,10 @@ static int gui_handle_menu(UWORD code)
       else
         quit = 1;
     } else if (MENUNUM(code) == 1) {
-      settings = 1;
+      if (ITEMNUM(code) == SETTINGS_CONFIGURE)
+        configure = 1;
+      else
+        settings = 1;
     } else if (MENUNUM(code) == 2) {
       gui_open_help((uint8_t) ITEMNUM(code));
     }
@@ -1545,6 +2618,8 @@ static int gui_handle_menu(UWORD code)
     gui_paint_rows();
     gui_paint_status();
   }
+  if (configure && !quit)
+    quit = gui_open_config();
   return quit;
 }
 
@@ -1627,7 +2702,10 @@ static void compute_layout(const struct Screen *scr, uint8_t bl, uint8_t bt,
 
 static void load_theme(void)
 {
-  amiga_theme_classic(&theme);
+  /* The WB1.3 build cannot read DrawInfo, but may run on Kickstart 2.0+,
+   * whose pens differ from 1.x; pick them by the running Intuition. */
+  amiga_theme_for_version(&theme,
+                          (uint16_t) IntuitionBase->LibNode.lib_Version);
   new_look = 0;
 #ifndef __KICK13__
   if (IntuitionBase->LibNode.lib_Version >= 36) {
