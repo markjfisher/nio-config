@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject a 64K Atari XEX whose load chunks overlap the boot bitmap."""
+"""Reject an Atari XEX whose load chunks overlap the boot bitmap."""
 import sys
 from pathlib import Path
 

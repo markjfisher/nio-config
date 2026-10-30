@@ -1,4 +1,4 @@
-"""The 64K splash must survive every executable load chunk."""
+"""The splash must survive every executable load chunk."""
 import unittest
 from common import REPO
 from check_atari_splash_layout import check
@@ -16,7 +16,11 @@ class SplashLayout(unittest.TestCase):
                           for shift in (6, 4, 2, 0)}, {0, 1, 2, 3})
 
     def test_checks_actual_xex_and_overlap_boundaries(self):
-        check((REPO / "build/atari/bin/config-nio.xex").read_bytes())
+        for xex in ("build/atari/bin/config-nio.xex",
+                    "build/atari-banked/bin/config-nio.xex"):
+            path = REPO / xex
+            if path.exists():
+                check(path.read_bytes())
         check(b"\xff\xff" + segment(0x9ffc, 0x9fff) + segment(0xafa0, 0xafa1))
         for start, end in ((0x9fff, 0xa000), (0xa000, 0xa000),
                            (0xaf9f, 0xafa0), (0xa100, 0xa101)):

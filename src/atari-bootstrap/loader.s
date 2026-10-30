@@ -6,8 +6,7 @@ SIOV    = $E459
 BUF     = $0700
 DOLOAD  = $084C                 ; PicoBoot DD's documented build, see README
 SECMASK = $092B
-SPLASH_STD  = $A000
-SPLASH_BANK = $4000
+SPLASH  = $A000
 srcptr  = $CB
 dstptr  = $CD
 SPLDL   = $0500
@@ -86,13 +85,10 @@ loader:
         lda #1
         sta use_bank
 standard:
-        ; The 64K image borrows BSS until the executable is loaded. On a
-        ; banked machine ANTIC sees main RAM while the CPU loads the banks.
-        lda #>SPLASH_STD
-        ldx use_bank
-        beq :+
-        lda #>SPLASH_BANK
-:       sta dstptr+1
+        ; $A000 is visible to ANTIC regardless of the extended-RAM mapping.
+        ; Both apps leave it untouched until the startup handoff clears BSS.
+        lda #>SPLASH
+        sta dstptr+1
         lda #0
         sta dstptr
         lda #<splash_image
@@ -124,12 +120,6 @@ copy_dl:
         dex
         cpx #$FF
         bne copy_dl
-        ; The list was copied after selecting the bitmap address.
-        lda #>SPLASH_STD
-        ldx use_bank
-        beq :+
-        lda #>SPLASH_BANK
-:       sta SPLDL+6
         lda #0
         sta COLOR4
         lda #$06
@@ -232,7 +222,7 @@ splash_dl:
         .repeat 4
         .byte $70
         .endrepeat
-        .byte $4E, <SPLASH_STD, >SPLASH_STD
+        .byte $4E, <SPLASH, >SPLASH
         .repeat 124
         .byte $0E
         .endrepeat

@@ -89,12 +89,12 @@ banks uses the banked image. The banked XEX needs the selector: it cannot be
 loaded directly without first selecting the banks.
 
 The selector displays the FujiNet NIO artwork as a 128×125, four-shade ANTIC
-mode E bitmap while PicoBoot loads the chosen app. On 64 KB machines, the
-4,000-byte bitmap temporarily uses `$A000–$AF9F`; a build check rejects any
-executable load chunk that overlaps it. The app blanks the display before its
-startup clears the overlapping BSS, then installs and enables its own screen.
-On banked machines the image lives in main RAM at `$4000–$4F9F`, which ANTIC
-can see while the CPU loads the application banks. The display list lives at
+mode E bitmap while PicoBoot loads the chosen app. The 4,000-byte bitmap
+uses `$A000–$AF9F` on both standard and banked machines. This area stays
+visible to ANTIC even on expansions that bank CPU and ANTIC together. A build
+check rejects executable load chunks that overlap it. The app blanks the
+display before startup clears the overlapping BSS, then installs and enables
+its own screen. The display list lives at
 `$0500`, away from PicoBoot's `$0700` sector buffer. Reset rebuilds the normal
 OS display and restarts the app.
 

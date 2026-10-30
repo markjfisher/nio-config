@@ -249,35 +249,36 @@ class BootTests(unittest.TestCase):
                     from PIL import Image
                     image_seen = False
                     while v.bridge.peek16(0x230) == 0x0500 and time.monotonic() < end:
-                        # ANTIC reads main RAM even while the CPU maps an XE
-                        # bank. Inspect the main view while paused, then restore
-                        # PORTB before letting the loader run again.
-                        portb = None
-                        v.bridge.pause()
-                        try:
-                            if not (v.bridge.peek(0x022f, 1)[0] & 0x20):
-                                break  # clean handoff before BSS is cleared
-                            portb = v.bridge.peek(0xd301, 1)[0]
-                            if ram_kb != 64:
-                                v.bridge.hwpoke(0xd301, portb | 0x10)
-                            address = 0xa000 if ram_kb == 64 else 0x4000
-                            actual = v.bridge.peek(address, len(expected))
-                        finally:
-                            if ram_kb != 64 and portb is not None:
-                                v.bridge.hwpoke(0xd301, portb)
-                            v.bridge.resume()
-                        self.assertEqual(actual, expected,
-                                         "application loading overwrote the image")
+                        # Do not change PORTB: the screen must be correct in
+                        # the machine's real CPU/ANTIC bank configuration.
+                        if not (v.bridge.peek(0x022f, 1)[0] & 0x20):
+                            break  # clean handoff before BSS is cleared
                         data = v.screenshot()
                         image = Image.open(BytesIO(data)).convert("RGB")
-                        pixels = image.tobytes()
-                        if sum(1 for i in range(0, len(pixels), 3)
-                               if min(pixels[i:i + 3]) > 100) > 500:
+                        # Check actual ANTIC pixels against the packed bitmap,
+                        # not merely whether the screenshot has bright pixels.
+                        matches = True
+                        for y in range(0, 125, 4):
+                            for x in range(0, 128, 4):
+                                pixel = expected[y * 32 + x // 4] >> 6
+                                brightness = image.getpixel((40 + 2 * x, 32 + y))[0]
+                                level = 0 if brightness < 40 else (1 if brightness < 135 else
+                                                                   2 if brightness < 205 else 3)
+                                if level != pixel:
+                                    matches = False
+                                    break
+                            if not matches:
+                                break
+                        if matches:
+                            self.assertEqual(v.bridge.peek(0xa000, len(expected)), expected,
+                                             "application loading overwrote the image")
                             image_seen = True
                             (Path(self.tmp.name) / ("splash-%d.png" % ram_kb)).write_bytes(data)
                             if os.environ.get("NIO_ATARI_SPLASH_PREVIEW"):
                                 (Path(os.environ["NIO_ATARI_SPLASH_PREVIEW"]) /
                                  ("splash-%d.png" % ram_kb)).write_bytes(data)
+                        elif image_seen and v.bridge.peek(0x022f, 1)[0] & 0x20:
+                            self.fail("the displayed loading image became corrupted")
                         time.sleep(.05)
                     self.assertLess(time.monotonic(), end, "loading image never handed off")
                     self.assertTrue(image_seen, "a complete loading image was never rendered")
@@ -295,6 +296,9 @@ class BootTests(unittest.TestCase):
 
     def test_splash_boot_banked(self):
         self.check_splash_boot(128)
+
+    def test_splash_boot_1088k(self):
+        self.check_splash_boot(1088)
 
     def test_attract_mode_banked(self):
         from test_ui_features import AttractMode
