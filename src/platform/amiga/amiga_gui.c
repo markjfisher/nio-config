@@ -575,11 +575,15 @@ static void row_string(uint16_t idx, uint8_t cols)
   case AMIGA_PAGE_BROWSE: {
     config_nio_entry_t *e = amiga_ctl_browse_row_entry(gctl, idx);
     uint8_t name_w = (uint8_t) (cols > 26 ? cols - 26 : 1);
-    int dir = !e || (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR) != 0;
+    int parent = amiga_ctl_browse_row_is_parent(gctl, idx);
+    int dir = parent || (e && (e->is_dir & CONFIG_NIO_ENTRY_FLAG_DIR));
 
-    /* No entry: the ".." row that leads to the parent drawer. */
-    amiga_clip_head(uri_text, sizeof(uri_text), e ? e->name : "..", name_w);
-    if (dir)
+    /* A failed window lookup is not the parent row. */
+    const char *name = e ? e->name : (parent ? ".." : "(unavailable)");
+    amiga_clip_head(uri_text, sizeof(uri_text), name, name_w);
+    if (!e && !parent)
+      size_buf[0] = 0;
+    else if (dir)
       strcpy(size_buf, "Drawer");
     else
       amiga_format_size(size_buf, e->size, s->prefs.size_format);

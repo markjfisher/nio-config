@@ -117,8 +117,12 @@ Browse asks the FujiNet for a folder a page at a time (the `ListPages`
 command, four entries per page). The device sorts the folder once, directories
 first, and config-nio keeps a window of about 200 entries, loading another
 window when you scroll outside it, so a folder can hold far more entries than
-the window (the list shows up to 65535). **Refresh** makes the FujiNet read the
-folder again; other navigation reuses its cached listing. With firmware that
+the window (the list has up to 65535 rows, including the `..` row in a
+drawer). **Refresh** makes the FujiNet read the folder again; other navigation
+reuses its cached listing. If a window load fails, entries are unavailable until
+Refresh retries, preventing a partial window from pointing at the wrong files.
+Names up to 220 bytes are retained; a name the device had to truncate cannot be
+opened or assigned. With firmware that
 does not support `ListPages`, config-nio reads the whole folder with the older
 listing command and shows its first 200 entries ("Showing 200 of N entries").
 `dump entries` in a script lists the current window.

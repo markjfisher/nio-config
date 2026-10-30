@@ -87,6 +87,7 @@ typedef struct {
    * then read once, and only its first CONFIG_NIO_MAX_ENTRIES entries show. */
   uint8_t browse_paged;
   uint8_t browse_reread;    /* next load asks the device to re-read the folder */
+  uint8_t browse_fault;     /* window invalid; Refresh retries after an error */
   uint16_t browse_base;
   uint8_t kick13;
   const char *fmount;

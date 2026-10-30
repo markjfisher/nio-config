@@ -9,7 +9,7 @@ CC65_HOME ?= ../cc65
 include makefiles/targets.mk
 
 FNSVC_LIST_MAX_PAYLOAD ?= 420
-ifneq ($(filter $(TARGET),bbc master),)
+ifneq ($(filter $(TARGET),bbc master bbc-clib),)
 FNSVC_LIST_MAX_PAYLOAD := 250
 endif
 
@@ -98,9 +98,13 @@ endif
 # Both BBC targets use the smaller assembly mapping-mount wrapper.  Master
 # shares the same BBC state API; its XRAM table selection does not change this
 # wrapper's interface or storage requirements.
-ifneq ($(filter $(TARGET),bbc master),)
+ifneq ($(filter $(TARGET),bbc master bbc-clib),)
 CONFIG_NIO_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/config_nio_state_bbc.c,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/bbc_oscli.s,$(CONFIG_NIO_ASM_SRCS))
+endif
+ifeq ($(TARGET),bbc-clib)
+# The clib ROM supplies bbc_exit_hook as part of its ABI.
+CONFIG_NIO_ASM_SRCS := $(filter-out $(SRC_DIR)/platform/bbc/ui/config_nio_exit_hook.s,$(CONFIG_NIO_ASM_SRCS))
 endif
 CONFIG_NIO_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CONFIG_NIO_SRCS))
 CONFIG_NIO_ASM_OBJS := $(patsubst %.s,$(OBJ_DIR)/%.o,$(CONFIG_NIO_ASM_SRCS))
@@ -128,7 +132,7 @@ endif
 
 DEPENDS := $(SUPPORT_OBJS:.o=.d) $(CONFIG_NIO_OBJS:.o=.d)
 
-ifneq ($(filter $(TARGET),bbc master),)
+ifneq ($(filter $(TARGET),bbc master bbc-clib),)
 CONFIG_NIO_BBC_TEMPLATE_INPUTS := \
 	bbc/assets/config-nio-templates/CNHOSTS \
 	bbc/assets/config-nio-templates/CNBROW \
@@ -156,7 +160,7 @@ CONFIG_NIO_DEPS := $(PDCURSES_MSDOS_LIB)
 CFLAGS += -i=$(PDCURSES_DIR)
 endif
 
-ifneq ($(filter $(TARGET),bbc master),)
+ifneq ($(filter $(TARGET),bbc master bbc-clib),)
 include makefiles/config-nio-bbc.mk
 endif
 
@@ -199,15 +203,18 @@ ifeq ($(TARGET),atari)
 	python3 scripts/check_atari_splash_layout.py $@ || { rm -f "$@"; exit 1; }
 endif
 
-ifneq ($(filter $(TARGET),bbc master),)
+ifneq ($(filter $(TARGET),bbc master bbc-clib),)
 BBC_CONFIG_NIO_START_ADDRESS_bbc ?= 0x1900
 BBC_CONFIG_NIO_START_ADDRESS_master ?= 0x0E00
+BBC_CONFIG_NIO_START_ADDRESS_bbc-clib ?= 0x1900
 BBC_CONFIG_NIO_HIMEM_bbc ?= 0x7C00
 BBC_CONFIG_NIO_HIMEM_master ?= 0x8000
+BBC_CONFIG_NIO_HIMEM_bbc-clib ?= 0x7C00
 BBC_CONFIG_NIO_SHADOW_MODE_bbc ?= 0
 BBC_CONFIG_NIO_SHADOW_MODE_master ?= 1
 BBC_CONFIG_NIO_XRAM_TABLES_bbc ?= 0
 BBC_CONFIG_NIO_XRAM_TABLES_master ?= 1
+BBC_CONFIG_NIO_XRAM_TABLES_bbc-clib ?= 0
 BBC_CONFIG_NIO_START_ADDRESS ?= $(BBC_CONFIG_NIO_START_ADDRESS_$(TARGET))
 BBC_CONFIG_NIO_HIMEM ?= $(BBC_CONFIG_NIO_HIMEM_$(TARGET))
 BBC_CONFIG_NIO_SHADOW_MODE ?= $(BBC_CONFIG_NIO_SHADOW_MODE_$(TARGET))

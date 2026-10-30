@@ -11,7 +11,7 @@ TEST_CFLAGS := -std=c99 -Wall -Wextra -O0 -g \
 	-Iinclude -Iinclude/common -Iinclude/platform/amiga -Itests/amiga \
 	-I$(FUJINET_NIO_LIB)/include \
 	-DFNSVC_LIST_MAX_PAYLOAD=420 -DCONFIG_NIO_MAX_ENTRIES=200 \
-	-DCONFIG_NIO_MAX_HOSTS=64 -DCONFIG_NIO_TEXT_MAX=16384 -DFNCTL_MAX_DATA=1024
+	-DCONFIG_NIO_MAX_HOSTS=64 -DCONFIG_NIO_NAME_MAX=220 -DCONFIG_NIO_TEXT_MAX=16384 -DFNCTL_MAX_DATA=1024
 
 AMIGA_HOST_SRCS := \
 	src/platform/amiga/amiga_drives.c \
@@ -33,16 +33,21 @@ PORTABLE_HOST_SRCS := \
 	src/platform/portable/config_nio_store.c \
 	src/platform/portable/config_nio_tables.c
 TEST_SUPPORT_SRCS := tests/amiga/run_tests.c tests/amiga/fake_nio.c
-TEST_SRCS := $(wildcard tests/amiga/test_*.c)
+TEST_SRCS := $(filter-out tests/amiga/test_fnsvc_wire.c,$(wildcard tests/amiga/test_*.c))
+WIRE_TEST := $(TEST_DIR)/test_fnsvc_wire
 
 .PHONY: all
-all: $(TEST_BIN)
+all: $(TEST_BIN) $(WIRE_TEST)
 	$(TEST_BIN) $(ONLY)
+	$(WIRE_TEST)
 
 $(TEST_BIN): $(TEST_SUPPORT_SRCS) $(TEST_SRCS) $(AMIGA_HOST_SRCS) $(PORTABLE_HOST_SRCS) \
 		$(wildcard tests/amiga/*.h tests/amiga/*.def include/platform/amiga/*.h include/*.h) \
 		makefiles/test-amiga-host.mk | $(TEST_DIR)
 	$(HOSTCC) $(TEST_CFLAGS) -o $@ $(filter %.c,$^)
+
+$(WIRE_TEST): tests/amiga/test_fnsvc_wire.c src/platform/portable/fnsvc.c include/common/fnsvc.h include/common/fnctl.h | $(TEST_DIR)
+	$(HOSTCC) $(TEST_CFLAGS) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(filter %.c,$^)
 
 $(TEST_DIR):
 	mkdir -p $@

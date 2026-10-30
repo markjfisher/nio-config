@@ -127,6 +127,23 @@ void test_ctl_browse(void)
   CHECK(amiga_ctl_browse_select_name(&ctl, "F001"));
   CHECK(ctl.entries.selected == 1);
 
+  /* Failure after part of a new window must not relabel it with the old base. */
+  CHECK(amiga_ctl_browse_refresh(&ctl));
+  fake_dir_pages_fail_at(188); /* row 249 centres at 148, next reply at 188 */
+  CHECK(amiga_ctl_browse_row_entry(&ctl, 249) == NULL);
+  CHECK(state.entry_count == 0);
+  CHECK(!strncmp(state.status, "Browse failed:", 14));
+  fake_dir_pages_fail_at(0xFFFFFFFFUL);
+  {
+    unsigned calls = fake_dir_pages_calls();
+    CHECK(amiga_ctl_browse_row_entry(&ctl, 0) == NULL);
+    CHECK(!amiga_ctl_browse_select_name(&ctl, "F000"));
+    CHECK(fake_dir_pages_calls() == calls); /* repaint does not retry repeatedly */
+  }
+  CHECK(amiga_ctl_browse_refresh(&ctl));
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 0)->name, "F000");
+  CHECK_STR(amiga_ctl_browse_row_entry(&ctl, 249)->name, "F249");
+
   /* Only an explicit Refresh asks the device to read the folder again. */
   {
     unsigned before = fake_dir_pages_refreshes();
@@ -151,6 +168,79 @@ void test_ctl_browse(void)
   fake_dir_pages_unsupported(0);
   CHECK(amiga_ctl_browse_open(&ctl));
   CHECK(ctl.browse_paged && ctl.entries.count == 250);
+
+  /* Full names up to 220 bytes survive; firmware-truncated names are unsafe. */
+  {
+    char name80[85], name220[221], cut_name[221], overlong[222], prefix[221];
+    fake_dir_entry_t entries[4];
+    memset(name80, 'a', 80); strcpy(name80 + 80, ".adf");
+    memset(name220, 'b', 216); strcpy(name220 + 216, ".adf");
+    memset(cut_name, 'c', 220); cut_name[220] = 0;
+    memset(overlong, 'd', 221); overlong[221] = 0;
+    memset(prefix, 'd', 220); prefix[220] = 0;
+    entries[0] = (fake_dir_entry_t) {0, name80, 1, 0};
+    entries[1] = (fake_dir_entry_t) {0, name220, 1, 0};
+    entries[2] = (fake_dir_entry_t) {CONFIG_NIO_ENTRY_FLAG_NAME_TRUNCATED, cut_name, 1, 0};
+    entries[3] = (fake_dir_entry_t) {0, overlong, 1, 0};
+    fake_dir_put("sd0:/", entries, 4);
+    amiga_list_select(&ctl.hosts, 0);
+    CHECK(amiga_ctl_browse_open(&ctl));
+    CHECK(amiga_ctl_browse_select_name(&ctl, name80));
+    CHECK(amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
+    CHECK(strlen(uri) == strlen("sd0:/") + strlen(name80));
+    CHECK(amiga_ctl_browse_select_name(&ctl, name220));
+    CHECK(amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
+    CHECK(strlen(uri) == strlen("sd0:/") + 220);
+    CHECK(amiga_ctl_browse_select_name(&ctl, cut_name));
+    CHECK(!amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
+    CHECK_STR(state.status, "Name too long for this client");
+    CHECK(amiga_ctl_browse_select_name(&ctl, prefix));
+    CHECK(!amiga_ctl_browse_uri(&ctl, uri, sizeof(uri))); /* local cut is flagged too */
+    /* The older ListDirectory fallback must preserve the same cut flag. */
+    fake_dir_pages_unsupported(1);
+    CHECK(amiga_ctl_browse_open(&ctl));
+    CHECK(amiga_ctl_browse_select_name(&ctl, name220));
+    CHECK(amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
+    CHECK(amiga_ctl_browse_select_name(&ctl, cut_name));
+    CHECK(!amiga_ctl_browse_uri(&ctl, uri, sizeof(uri)));
+    fake_dir_pages_unsupported(0);
+  }
+
+  /* Reserve room for the parent row at the 16-bit list limit. */
+  {
+    static const fake_dir_entry_t empty[] = {{0, "unused", 0, 0}};
+    fake_dir_put("sd0:/", empty, 0);
+    fake_dir_put("sd0:/huge/", empty, 0);
+    amiga_list_select(&ctl.hosts, 0);
+    fake_dir_pages_total(65535UL);
+    CHECK(amiga_ctl_browse_open(&ctl));
+    CHECK(state.entry_total == 65535 && ctl.entries.count == 65535);
+    CHECK_STR(state.status, "Entries loaded");
+    fake_dir_pages_total(65536UL);
+    CHECK(amiga_ctl_browse_refresh(&ctl));
+    CHECK(state.entry_total == 65535 && ctl.entries.count == 65535);
+    CHECK_STR(state.status, "Showing the first 65535 entries");
+    strcpy(state.browse_path, "huge/");
+    ctl.browse_host = 0;
+    fake_dir_pages_total(65535UL);
+    CHECK(amiga_ctl_browse_refresh(&ctl));
+    CHECK(state.entry_total == 65534 && ctl.entries.count == 65535);
+    CHECK(amiga_ctl_browse_row_is_parent(&ctl, 0));
+    CHECK_STR(state.status, "Showing the first 65534 entries");
+    /* A last window may include rows past the displayed limit; searching
+     * for one must not wrap its index into an unrelated visible row. */
+    ctl.browse_base = 65532;
+    state.entry_count = 3;
+    strcpy(state.entries[0].name, "last-2");
+    strcpy(state.entries[1].name, "last-1");
+    strcpy(state.entries[2].name, "beyond");
+    amiga_list_select(&ctl.entries, 0);
+    fake_dir_pages_fail_at(0);
+    CHECK(!amiga_ctl_browse_select_name(&ctl, "beyond"));
+    CHECK(ctl.entries.selected == 0);
+    fake_dir_pages_fail_at(0xFFFFFFFFUL);
+    fake_dir_pages_total(0);
+  }
 
   /* No host at all. */
   while (state.host_count)

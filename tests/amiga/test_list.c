@@ -51,4 +51,13 @@ void test_list(void)
 
   amiga_list_set_count(&l, 0);
   CHECK(l.selected == AMIGA_LIST_NONE && l.top == 0);
+
+  /* At the 16-bit limit, keeping a selection visible must not wrap. */
+  amiga_list_set_rows(&l, 10);
+  amiga_list_set_count(&l, 65535);
+  amiga_list_select(&l, 65534);
+  CHECK(l.selected == 65534 && l.top == 65525);
+  amiga_list_select(&l, 65533);
+  CHECK(l.selected == 65533 && l.top == 65525);
+  CHECK(amiga_list_hit(&l, 81, 9, &idx) && idx == 65534);
 }

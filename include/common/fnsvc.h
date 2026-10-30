@@ -30,13 +30,17 @@ typedef void (*fnsvc_list_cb)(uint8_t is_dir,
                               void *ctx);
 
 int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx);
+/* Flags variant preserves bit 7 (name cut) as well as bit 0 (directory).
+ * The original function retains its boolean callback for existing clients. */
+int fnsvc_list_directory_flags(const char *uri, fnsvc_list_cb cb, void *ctx);
 /* Paged listing (ListPages): the device sorts the folder once, directories
  * first, and hands out pages of FNSVC_PAGE_SIZE entries.  The page size must
  * stay fixed while one folder is browsed, because page numbers depend on it.
  * first_entry must be a multiple of FNSVC_PAGE_SIZE.  One call delivers whole
  * pages (as many as fit FNSVC_PAGE_BUDGET bytes) through cb, sets *total to the
  * folder's entry count and *delivered to the entries passed to cb.  refresh
- * makes the device re-read the folder.  Returns 0 on failure; fnsvc_last_error()
+ * makes the device re-read the folder. The callback receives entry flags:
+ * bit 0 is directory, bit 7 means the name was cut. Returns 0 on failure; fnsvc_last_error()
  * is FNSVC_ERR_UNSUPPORTED on firmware without ListPages, so callers can fall
  * back to fnsvc_list_directory(). */
 #define FNSVC_PAGE_SIZE 4

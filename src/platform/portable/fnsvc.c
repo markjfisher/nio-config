@@ -94,7 +94,7 @@ static uint32_t get_u32le(const uint8_t *p)
       | ((uint32_t) p[3] << 24);
 }
 
-int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
+static int list_directory(const char *uri, fnsvc_list_cb cb, void *ctx, uint8_t preserve_flags)
 {
   uint16_t uri_len = (uint16_t) strlen(uri);
   uint16_t start = 0;
@@ -177,7 +177,7 @@ int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
         pos += 16;
       }
 
-      cb((uint8_t) (eflags & 0x01), list_name, size, mtime, ctx);
+      cb((uint8_t) (eflags & (preserve_flags ? 0x81 : 0x01)), list_name, size, mtime, ctx);
     }
 
     start = (uint16_t) (start + count);
@@ -188,6 +188,16 @@ int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
   }
 
   return 1;
+}
+
+int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
+{
+  return list_directory(uri, cb, ctx, 0);
+}
+
+int fnsvc_list_directory_flags(const char *uri, fnsvc_list_cb cb, void *ctx)
+{
+  return list_directory(uri, cb, ctx, 1);
 }
 
 /* ListPages request: version, uriLen, uri, startPage, pageSize,
@@ -292,7 +302,7 @@ int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
       memcpy(list_name, &resp_buf[pos], name_len);
       list_name[name_len] = 0;
       pos += name_len;
-      cb((uint8_t) (eflags & 0x01), list_name, get_u32le(&resp_buf[pos]),
+      cb((uint8_t) (eflags & 0x81), list_name, get_u32le(&resp_buf[pos]),
          get_u32le(&resp_buf[pos + 4]), ctx);
       pos += 8;
       count++;

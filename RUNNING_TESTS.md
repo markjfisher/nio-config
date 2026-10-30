@@ -163,6 +163,10 @@ make test-amiga-host
 make test-amiga-host ONLY=ctl_drives
 ```
 
+The host suite also runs a separate test of the real FileService response parser;
+the controller fake covers long filenames, truncated names, failed window reloads
+and the 16-bit list boundary.
+
 Target builds (needs `m68k-amigaos-gcc` and `make -C ../fujinet-nio-lib amiga`):
 
 ```sh

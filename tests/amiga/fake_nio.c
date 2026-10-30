@@ -42,6 +42,8 @@ static unsigned slot_range_calls;
 static uint8_t range_buf[1024];
 static uint8_t last_error;
 static uint8_t pages_unsupported;
+static uint32_t pages_fail_at = 0xFFFFFFFFUL;
+static uint32_t pages_total;
 static unsigned pages_calls;
 static unsigned pages_refreshes;
 static unsigned list_calls;
@@ -59,6 +61,8 @@ void fake_nio_reset(void)
   last_error = 0;
   last_status = 0;
   fake_dir_pages_unsupported(0);
+  pages_fail_at = 0xFFFFFFFFUL;
+  pages_total = 0;
   fake_wifi_reset();
 }
 
@@ -284,6 +288,21 @@ int fnsvc_list_directory(const char *uri, fnsvc_list_cb cb, void *ctx)
   return 1;
 }
 
+int fnsvc_list_directory_flags(const char *uri, fnsvc_list_cb cb, void *ctx)
+{
+  return fnsvc_list_directory(uri, cb, ctx);
+}
+
+void fake_dir_pages_fail_at(uint32_t first_entry)
+{
+  pages_fail_at = first_entry;
+}
+
+void fake_dir_pages_total(uint32_t total)
+{
+  pages_total = total;
+}
+
 void fake_dir_pages_unsupported(int unsupported)
 {
   pages_unsupported = (uint8_t) unsupported;
@@ -325,12 +344,13 @@ int fnsvc_list_pages(const char *uri, uint32_t first_entry, uint8_t refresh,
     last_status = 8;
     return 0;
   }
-  if (!d || d->fail || (first_entry % FNSVC_PAGE_SIZE) != 0) {
+  if (!d || d->fail || first_entry == pages_fail_at ||
+      (first_entry % FNSVC_PAGE_SIZE) != 0) {
     last_error = FNSVC_ERR_STATUS;
     last_status = 5;
     return 0;
   }
-  *total = d->count;
+  *total = pages_total ? pages_total : d->count;
   end = first_entry + FAKE_PAGES_PER_REPLY * FNSVC_PAGE_SIZE;
   if (end > d->count)
     end = d->count;

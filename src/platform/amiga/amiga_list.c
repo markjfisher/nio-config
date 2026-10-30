@@ -15,7 +15,7 @@ static void ensure_visible(amiga_list_t *l)
     return;
   if (l->selected < l->top)
     l->top = l->selected;
-  else if (l->selected >= (uint16_t) (l->top + l->rows))
+  else if ((uint32_t) l->selected >= (uint32_t) l->top + l->rows)
     l->top = (uint16_t) (l->selected - l->rows + 1);
 }
 
