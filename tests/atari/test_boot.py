@@ -249,7 +249,24 @@ class BootTests(unittest.TestCase):
                     from PIL import Image
                     image_seen = False
                     while v.bridge.peek16(0x230) == 0x0500 and time.monotonic() < end:
-                        self.assertEqual(v.bridge.peek(0xbc00, len(expected)), expected,
+                        # ANTIC reads main RAM even while the CPU maps an XE
+                        # bank. Inspect the main view while paused, then restore
+                        # PORTB before letting the loader run again.
+                        portb = None
+                        v.bridge.pause()
+                        try:
+                            if not (v.bridge.peek(0x022f, 1)[0] & 0x20):
+                                break  # clean handoff before BSS is cleared
+                            portb = v.bridge.peek(0xd301, 1)[0]
+                            if ram_kb != 64:
+                                v.bridge.hwpoke(0xd301, portb | 0x10)
+                            address = 0xa000 if ram_kb == 64 else 0x4000
+                            actual = v.bridge.peek(address, len(expected))
+                        finally:
+                            if ram_kb != 64 and portb is not None:
+                                v.bridge.hwpoke(0xd301, portb)
+                            v.bridge.resume()
+                        self.assertEqual(actual, expected,
                                          "application loading overwrote the image")
                         data = v.screenshot()
                         image = Image.open(BytesIO(data)).convert("RGB")
@@ -258,6 +275,9 @@ class BootTests(unittest.TestCase):
                                if min(pixels[i:i + 3]) > 100) > 500:
                             image_seen = True
                             (Path(self.tmp.name) / ("splash-%d.png" % ram_kb)).write_bytes(data)
+                            if os.environ.get("NIO_ATARI_SPLASH_PREVIEW"):
+                                (Path(os.environ["NIO_ATARI_SPLASH_PREVIEW"]) /
+                                 ("splash-%d.png" % ram_kb)).write_bytes(data)
                         time.sleep(.05)
                     self.assertLess(time.monotonic(), end, "loading image never handed off")
                     self.assertTrue(image_seen, "a complete loading image was never rendered")
@@ -265,6 +285,7 @@ class BootTests(unittest.TestCase):
                 time.sleep(.01)
             self.assertTrue(saw_splash, "the loading image was never displayed")
             v.wait_for("Hosts", row=1, timeout=240)
+            self.assertEqual(v.bridge.peek(0x022f, 1)[0] & 0x22, 0x22)
             self.assertEqual(bool(v.bridge.peek(0xd301, 1)[0] & 0x10), ram_kb == 64)
         boot(atr, scenario, basic=True, ram_kb=ram_kb,
              xex=BANKED_XEX if ram_kb != 64 else XEX)

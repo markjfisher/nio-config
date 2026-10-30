@@ -88,15 +88,20 @@ it probes. A 64 KB machine uses the standard image; a machine with those two
 banks uses the banked image. The banked XEX needs the selector: it cannot be
 loaded directly without first selecting the banks.
 
-As soon as the selector starts, it displays the existing FujiNet NIO artwork
-while PicoBoot loads the chosen app. Its uncompressed 960-byte monochrome
-bitmap uses `$BC00–$BFBF`, above both app layouts and their C stack; its small
-display list lives at `$0500`, away from PicoBoot's `$0700` sector buffer and
-the app's `$0600` display list. The app switches to its own screen after it
-starts. Reset may reuse this memory for the OS screen. The source image is
-`images/config-nio-160x96x4.png`; `python3 scripts/atari_splash_bitmap.py`
-regenerates the checked-in ANTIC mode B bitmap (Pillow is needed only for
-regeneration, not for builds).
+The selector displays the FujiNet NIO artwork as a 128×125, four-shade ANTIC
+mode E bitmap while PicoBoot loads the chosen app. On 64 KB machines, the
+4,000-byte bitmap temporarily uses `$A000–$AF9F`; a build check rejects any
+executable load chunk that overlaps it. The app blanks the display before its
+startup clears the overlapping BSS, then installs and enables its own screen.
+On banked machines the image lives in main RAM at `$4000–$4F9F`, which ANTIC
+can see while the CPU loads the application banks. The display list lives at
+`$0500`, away from PicoBoot's `$0700` sector buffer. Reset rebuilds the normal
+OS display and restarts the app.
+
+The original artwork is `images/FujiNet-config-nio-5_3.xcf`; the checked-in
+`images/config-nio-splash-source.png` is its visible artwork exported at
+160×96. Run `python3 scripts/atari_splash_bitmap.py` to regenerate the packed
+bitmap (Pillow is needed only for regeneration, not for builds).
 
 The selector uses the resident entry points and DD sector layout of the pinned
 PicoBoot binary; the boot-disk build checks the binary hash. The selector reads
@@ -133,7 +138,8 @@ does not fit, so the Atari has a compact core of its own (`atari_core.c`) and
 does not use `fnsvc`, `fnctl` or conio.
 
 * `$0650-$0BFF` (page 6 after the display list, and the pages PicoBoot's loader used)
-  holds buffers that need no initial value. In the standard build this includes the
+  holds the 11-byte startup handoff at `$0650–$065A` and buffers that need no
+  initial value. In the standard build the latter includes the
   page cache; in the banked build it holds one cache-record staging buffer instead.
 * The standard layout in `makefiles/cc65-atari-nio.cfg` loads at `$0C00` up to
   `$BC00`. The banked layout splits resident code around the bank window.

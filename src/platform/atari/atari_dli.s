@@ -5,13 +5,16 @@
 
         .export _scr_vectors_set, _scr_vectors_off, _scr_coldstart, _scr_sio_hook
         .export _scr_flat_on, _scr_flat_off, _scr_reading_on, _scr_reading
-        .export _scr_nmi_mode, setcursor
+        .export _scr_nmi_mode, setcursor, _splash_start
+        .import start
         .import _row_bg, _row_fg, _nxt_bg, _nxt_fg, _lms_lo, _lms_hi, _scr_swap
         .import _scr_sio_bg, _scr_sio_fg
         .import fn_sio_vec
 
 VDSLST  = $0200
 SDLSTL  = $0230
+SDMCTL  = $022F
+DMACTL  = $D400
 NMIEN   = $D40E
 WSYNC   = $D40A
 COLPF1  = $D017
@@ -38,6 +41,15 @@ next_fg: .res   1
 next_bg: .res   1
 dlirow:  .res   1
 
+        .segment "SPLASHCODE"
+
+; Hide the temporary 64K splash before cc65 clears its overlapping BSS.
+_splash_start:
+        lda     #0
+        sta     SDMCTL
+        sta     DMACTL
+        jmp     start
+
         .segment "CODE"
 
 ; cgetc normally restores and updates the OS text cursor through OLDADR.
@@ -50,7 +62,6 @@ setcursor:
 ; and enable the display list interrupt.
 _scr_vectors_set:
         lda     #0
-        sta     dlirow
         sta     _scr_reading
         lda     #<dli
         sta     VDSLST
@@ -69,6 +80,8 @@ _scr_vectors_set:
         lda     #NMI_ON
         sta     _scr_nmi_mode
         sta     NMIEN
+        lda     #$22
+        sta     SDMCTL
         rts
 
 _scr_flat_on:

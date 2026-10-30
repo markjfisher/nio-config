@@ -6,9 +6,13 @@ SIOV    = $E459
 BUF     = $0700
 DOLOAD  = $084C                 ; PicoBoot DD's documented build, see README
 SECMASK = $092B
-SPLASH  = $BC00
+SPLASH_STD  = $A000
+SPLASH_BANK = $4000
+srcptr  = $CB
+dstptr  = $CD
 SPLDL   = $0500
 SDLSTL  = $0230
+SDMCTL  = $022F
 COLOR0  = $02C4
 COLOR1  = $02C5
 COLOR2  = $02C6
@@ -16,45 +20,10 @@ COLOR4  = $02C8
 
         .segment "CODE"
 loader:
-        ; BASIC must be switched out before writing the high-RAM bitmap.
+        ; BASIC must be switched out for probing and the 64K bitmap.
         lda PORTB
         ora #2
         sta PORTB
-        ; ANTIC's page-5 display list and the 960-byte bitmap survive both
-        ; XEX layouts and stay in place until the app installs its screen.
-        ldx #0
-copy_image:
-        lda splash_image,x
-        sta SPLASH,x
-        lda splash_image+$100,x
-        sta SPLASH+$100,x
-        lda splash_image+$200,x
-        sta SPLASH+$200,x
-        inx
-        bne copy_image
-        ldx #0
-copy_tail:
-        lda splash_image+$300,x
-        sta SPLASH+$300,x
-        inx
-        cpx #192
-        bne copy_tail
-        ldx #splash_dl_end-splash_dl-1
-copy_dl:
-        lda splash_dl,x
-        sta SPLDL,x
-        dex
-        bpl copy_dl
-        lda #0
-        sta COLOR2
-        sta COLOR4
-        lda #$0e
-        sta COLOR0
-        sta COLOR1
-        lda #<SPLDL
-        sta SDLSTL
-        lda #>SPLDL
-        sta SDLSTL+1
         ; Preserve both bytes, including on a 64K machine where they alias.
         lda #$FF
         sta PORTB
@@ -117,6 +86,64 @@ copy_dl:
         lda #1
         sta use_bank
 standard:
+        ; The 64K image borrows BSS until the executable is loaded. On a
+        ; banked machine ANTIC sees main RAM while the CPU loads the banks.
+        lda #>SPLASH_STD
+        ldx use_bank
+        beq :+
+        lda #>SPLASH_BANK
+:       sta dstptr+1
+        lda #0
+        sta dstptr
+        lda #<splash_image
+        sta srcptr
+        lda #>splash_image
+        sta srcptr+1
+        ldx #15                 ; 3840 bytes, 15 whole pages
+        ldy #0
+copy_image:
+        lda (srcptr),y
+        sta (dstptr),y
+        iny
+        bne copy_image
+        inc srcptr+1
+        inc dstptr+1
+        dex
+        bne copy_image
+        ldy #0
+copy_tail:
+        lda (srcptr),y
+        sta (dstptr),y
+        iny
+        cpy #160                ; 4000 bytes total
+        bne copy_tail
+        ldx #splash_dl_end-splash_dl-1
+copy_dl:
+        lda splash_dl,x
+        sta SPLDL,x
+        dex
+        cpx #$FF
+        bne copy_dl
+        ; The list was copied after selecting the bitmap address.
+        lda #>SPLASH_STD
+        ldx use_bank
+        beq :+
+        lda #>SPLASH_BANK
+:       sta SPLDL+6
+        lda #0
+        sta COLOR4
+        lda #$06
+        sta COLOR0
+        lda #$0A
+        sta COLOR1
+        lda #$0E
+        sta COLOR2
+        lda #$21                ; narrow playfield: 32 bytes per line
+        sta SDMCTL
+        lda #<SPLDL
+        sta SDLSTL
+        lda #>SPLDL
+        sta SDLSTL+1
         ; Read the first MyDOS directory sector from D1, 256 bytes.
         lda #$31
         sta $0300
@@ -200,15 +227,14 @@ bank_byte: .byte 0
 use_bank: .byte 0
 entry_offset: .byte 0
 
-; ANTIC mode B: 160 x 48 pixels, doubled vertically by the display mode.
-; Blank lines center the bitmap; no DLI or SIO hooks are required.
+; ANTIC mode E: 128 x 125 pixels, four shades, 32 bytes per line.
 splash_dl:
-        .repeat 6
+        .repeat 4
         .byte $70
         .endrepeat
-        .byte $4B, <SPLASH, >SPLASH
-        .repeat 47
-        .byte $0B
+        .byte $4E, <SPLASH_STD, >SPLASH_STD
+        .repeat 124
+        .byte $0E
         .endrepeat
         .byte $41, <SPLDL, >SPLDL
 splash_dl_end:
