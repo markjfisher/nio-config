@@ -3,8 +3,11 @@
 #include "fujinet-nio.h"
 #include "amiga_ctl.h"
 #include "amiga_exec.h"
+#include "amiga_fmt.h"
 #include "amiga_gui.h"
+#include "amiga_net.h"
 #include "amiga_options.h"
+#include "amiga_splash.h"
 
 #include <exec/types.h>
 #include <workbench/startup.h>
@@ -174,7 +177,7 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
       if (amiga_options_parse(&options, argv[i]) != 1) {
         puts("Usage: config-nio [FMOUNT=path] [FUMOUNT=path] "
-             "[SCRIPT=file] [RESULT=file]");
+             "[SPLASH=ON|OFF] [SCRIPT=file] [RESULT=file]");
         rc = 10;
         goto out;
       }
@@ -182,6 +185,9 @@ int main(int argc, char **argv)
   }
   amiga_options_finish(&options);
 
+  /* A scripted run has nobody to look at it. */
+  if (!options.script[0] && !options.no_splash)
+    amiga_splash_open("Connecting to FujiNet...");
   if (fn_init() != FN_OK) {
     amiga_gui_fatal("FujiNet init failed.\nIs fujinet-nio.device installed?");
     goto out;
@@ -190,8 +196,15 @@ int main(int argc, char **argv)
     amiga_gui_fatal("FujiNet is not ready.");
     goto shutdown;
   }
+  amiga_splash_text("Loading hosts...");
   if (!config_nio_load(&state)) {
-    amiga_gui_fatal("Unable to load config-nio state.");
+    char msg[96];
+    uint8_t code = 0;
+    const char *step = config_nio_load_error(&code);
+
+    amiga_sprintf(msg, "Unable to load config-nio state.\nReading the %s failed: FujiNet error %u.",
+                  step, (unsigned) code);
+    amiga_gui_fatal(msg);
     goto shutdown;
   }
   if (!tools_match(kick13))
@@ -201,11 +214,17 @@ int main(int argc, char **argv)
   if (((struct Library *) DOSBase)->lib_Version >= 36)
     amiga_ctl_set_probe(&ctl, drive_present, NULL);
   amiga_ctl_set_media_probes(&ctl, inspect_media, NULL, handler_pinned, NULL);
+  if (!options.script[0]) {
+    amiga_splash_text("Checking Wi-Fi...");
+    (void) amiga_ctl_net_status_read(&ctl);
+  }
+  amiga_splash_wait(AMIGA_SPLASH_MIN_TICKS);
   rc = amiga_gui_run(&ctl, &options);
 
 shutdown:
   fn_shutdown();
 out:
+  amiga_splash_close();
   if (IconBase)
     CloseLibrary(IconBase);
   if (GfxBase)

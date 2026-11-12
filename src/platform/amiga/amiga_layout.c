@@ -62,7 +62,13 @@ int amiga_layout_compute(const amiga_layout_in_t *in, amiga_layout_t *out)
     out->logo = rect((int16_t) (x0 + cw - in->logo_w), y, in->logo_w,
                      (int16_t) (btn_h + AMIGA_LAYOUT_GAP + info_h));
   }
-  spread(out->tab, AMIGA_TAB_COUNT, x0, y, head_w, btn_h);
+  /* Tabs start at the page frame's left edge, AMIGA_PAGE_MARGIN outside
+   * the content. */
+  spread(out->tab, AMIGA_TAB_COUNT, (int16_t) (x0 - AMIGA_PAGE_MARGIN), y,
+         (int16_t) (head_w + AMIGA_PAGE_MARGIN), btn_h);
+  out->page = rect((int16_t) (x0 - AMIGA_PAGE_MARGIN),
+                   (int16_t) (y + btn_h), (int16_t) (cw + 2 * AMIGA_PAGE_MARGIN),
+                   0);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->info = rect(x0, y, head_w, info_h);
   y = (int16_t) (y + info_h + AMIGA_LAYOUT_GAP);
@@ -100,6 +106,9 @@ int amiga_layout_compute(const amiga_layout_in_t *in, amiga_layout_t *out)
   y = (int16_t) (y + str_h + AMIGA_LAYOUT_GAP);
 
   spread(out->button, AMIGA_BUTTON_COUNT, x0, y, cw, btn_h);
+  /* The frame's bottom edge sits one row below the buttons, in the gap
+   * above the status line. */
+  out->page.height = (int16_t) (y + btn_h + 2 - out->page.top);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->status = rect(x0, y, cw, status_h);
   y = (int16_t) (y + status_h + AMIGA_LAYOUT_PAD);
@@ -124,7 +133,10 @@ int amiga_cfg_layout_compute(const amiga_layout_in_t *in,
   out->row_h = (uint8_t) (in->font_h + 1);
 
   y = (int16_t) (in->border_t + AMIGA_LAYOUT_PAD);
-  spread(out->tab, AMIGA_CFG_TAB_COUNT, x0, y, cw, btn_h);
+  spread(out->tab, AMIGA_CFG_TAB_COUNT, (int16_t) (x0 - AMIGA_PAGE_MARGIN), y,
+         (int16_t) (cw + 2 * AMIGA_PAGE_MARGIN), btn_h);
+  out->page = rect((int16_t) (x0 - AMIGA_PAGE_MARGIN), (int16_t) (y + btn_h),
+                   (int16_t) (cw + 2 * AMIGA_PAGE_MARGIN), 0);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->info = rect(x0, y, cw, info_h);
   y = (int16_t) (y + info_h + AMIGA_LAYOUT_GAP);
@@ -145,9 +157,73 @@ int amiga_cfg_layout_compute(const amiga_layout_in_t *in,
   y = (int16_t) (y + out->list.height + AMIGA_LAYOUT_GAP);
 
   spread(out->button, AMIGA_CFG_BUTTON_COUNT, x0, y, cw, btn_h);
+  out->page.height = (int16_t) (y + btn_h + 2 - out->page.top);
   y = (int16_t) (y + btn_h + AMIGA_LAYOUT_GAP);
   out->status = rect(x0, y, cw, status_h);
   y = (int16_t) (y + status_h + AMIGA_LAYOUT_PAD);
   out->win_h = (uint16_t) (y + in->border_b);
   return 1;
+}
+
+int amiga_tiles_compute(amiga_rect_t panel, amiga_tiles_t *out)
+{
+  amiga_rect_t in = amiga_rect_inset(panel, AMIGA_TILE_GAP, AMIGA_TILE_GAP);
+  int16_t tw, th, cap, r, c;
+
+  out->panel = panel;
+  if (in.height >= 2 * AMIGA_TILE_BIG_H + AMIGA_TILE_GAP) {
+    out->big = 1;
+    cap = (int16_t) (AMIGA_TILE_BIG_H + 14);
+  } else if (in.height >= 2 * AMIGA_TILE_COMPACT_H + AMIGA_TILE_GAP) {
+    out->big = 0;
+    cap = (int16_t) (AMIGA_TILE_COMPACT_H + 4);
+  } else {
+    return 0;
+  }
+  tw = (int16_t) ((in.width - AMIGA_TILE_GAP * (AMIGA_TILE_COLS - 1)) /
+                  AMIGA_TILE_COLS);
+  th = (int16_t) ((in.height - AMIGA_TILE_GAP) / AMIGA_TILE_ROWS);
+  if (th > cap)
+    th = cap;
+  if (tw < 8 * 12)
+    return 0;
+  /* Spare height is split above and below, so the grid sits centred. */
+  in.top = (int16_t) (in.top + (in.height - (2 * th + AMIGA_TILE_GAP)) / 2);
+  for (r = 0; r < AMIGA_TILE_ROWS; r++)
+    for (c = 0; c < AMIGA_TILE_COLS; c++)
+      out->tile[r * AMIGA_TILE_COLS + c] =
+        rect((int16_t) (in.left + c * (tw + AMIGA_TILE_GAP)),
+             (int16_t) (in.top + r * (th + AMIGA_TILE_GAP)), tw, th);
+  return 1;
+}
+
+int amiga_tiles_hit(const amiga_tiles_t *t, int16_t x, int16_t y,
+                    uint8_t *index)
+{
+  uint8_t i;
+
+  for (i = 0; i < AMIGA_TILE_COUNT; i++) {
+    const amiga_rect_t *r = &t->tile[i];
+
+    if (x >= r->left && x < r->left + r->width && y >= r->top &&
+        y < r->top + r->height) {
+      *index = i;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+uint8_t amiga_tiles_step(uint16_t selected, int dx, int dy)
+{
+  int c;
+  int r;
+
+  if (selected >= AMIGA_TILE_COUNT)
+    return 0;
+  c = (int) (selected % AMIGA_TILE_COLS) + dx;
+  r = (int) (selected / AMIGA_TILE_COLS) + dy;
+  if (c < 0 || c >= AMIGA_TILE_COLS || r < 0 || r >= AMIGA_TILE_ROWS)
+    return (uint8_t) selected;
+  return (uint8_t) (r * AMIGA_TILE_COLS + c);
 }

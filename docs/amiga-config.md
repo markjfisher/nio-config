@@ -10,7 +10,7 @@ Kickstart/Workbench 1.3 and later, in one window on the Workbench screen.
 | BBC / MS-DOS config | Amiga |
 | --- | --- |
 | Hosts: add, edit, delete, move, browse | **Hosts** page: list of up to 64 hosts, `URI` field; Browse / Add / Replace / Remove / Move Up / Move Down |
-| Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…** / **Add to Slot**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
+| Browse a host, enter directories, assign a file to a slot, map it to a drive | **Browse** page: name, size (or `Drawer`) and date; Open / Parent / Refresh / **Mount…** / **Catalogue**. Mount lists the drives and what each holds; pick one, keep or untick `RO`, and press Mount (or Replace) |
 | Slots: page through 0–255, edit, clear | **Catalogue** page: the occupied slots that FMOUNT mounts from; Mount… / Set / Clear |
 | Drive map and "Mount + Exit" | **Drives** page: drive, mode, slot and image; Eject runs `FUMOUNT drive` |
 | Preferences | **Settings** menu: date `YY-MM-DD`/`YY-DD-MM`, sizes Full/Compact |
@@ -22,7 +22,7 @@ side by side:
 | Window | Shell |
 | --- | --- |
 | Mount… (Browse) | `FIN` into a slot (the one already holding the image, else the first empty one), then `FMOUNT slot drive RO\|RW` |
-| Add to Slot (Browse) | `FIN slot image`; pick the slot from the list of all 256 |
+| Catalogue (Browse) | `FIN slot image`; pick the slot from the list of all 256 |
 | Catalogue page | `FLS` |
 | Catalogue ▸ Set / Clear / Mount… | `FIN slot image` / `FOUT slot` / `FMOUNT slot drive` |
 | Drives page | `FDRIVE` |
@@ -37,7 +37,7 @@ reason the window has no Save/Use/Cancel buttons.
 From a Shell:
 
 ```text
-config-nio [FMOUNT=path] [FUMOUNT=path] [SCRIPT=file] [RESULT=file]
+config-nio [FMOUNT=path] [FUMOUNT=path] [SPLASH=ON|OFF] [SCRIPT=file] [RESULT=file]
 ```
 
 From Workbench, double-click the `config-nio` icon. Its ToolTypes use the same
@@ -48,6 +48,7 @@ brackets, such as `(FMOUNT=...)`.
 | --- | --- | --- |
 | `FMOUNT` | `fmount` | Command used by Mount, resolved through the inherited AmigaDOS command path |
 | `FUMOUNT` | `fumount` | Command used by Eject, resolved through the inherited AmigaDOS command path |
+| `SPLASH` | `ON` | A small window with the logo and a line of progress while the program connects to the FujiNet and loads its state, shown for at least a second. `OFF` (or `NO`, `0`) skips it. It is never shown for a `SCRIPT` run |
 | `SCRIPT` | none | Run commands from a file instead of waiting for input |
 | `RESULT` | `RAM:config-nio.result` | Transcript file for `SCRIPT` |
 
@@ -75,6 +76,19 @@ example `FMOUNT failed for DN0: fmount: Unknown command (rc 10)`.
 - Click a row to select it. Double-click it, or press Return, to run the
   page's main action: browse a host, open a drawer, mount an image file,
   mount a catalogue slot, or open (or remount) a drive.
+- Rows in Browse, Catalogue and the mount pickers start with a small glyph:
+  a drawer, a disk image (ADF or HDF), a plain file or a floppy.
+- The **Drives** page shows its eight drives as tiles, four across. A mounted
+  drive is a raised tile with a solid floppy, its image name and `RO`/`RW`
+  and slot; a drive whose image is saved but not mounted keeps the outline with a faded (dotted) body and says "not mounted"; an empty drive is pressed in with a dotted floppy; selection is shown by the fill colour and does not change the bevel. Click a tile to
+  select it, double-click (or Return) to open it, and use the cursor keys to
+  move around the grid. On a window too short for two rows of tiles the page
+  falls back to the list, and the same applies if chip memory for the icons
+  cannot be allocated. Mount, Remount and Eject run AmigaDOS commands that
+  hold the window until they finish, so the status line first says what is
+  starting ("Mounting hd.adf on DN1: ...") and, on the tiles, the affected
+  drive shows its floppy half in or out with "Mounting..." or "Ejecting...". The glyphs and icons use only the screen's own pens, so
+  they look right on the four-colour Workbench 1.3 screen as well as 2.x/3.x.
 
 To mount an image:
 
@@ -92,7 +106,7 @@ To mount an image:
    button reads **Replace** and asks first. **Cancel** or Esc goes back.
 
 To put an image in the catalogue without mounting it, select it on
-**Browse** and press **Add to Slot**. The list then shows all 256 slots
+**Browse** and press **Catalogue**. The list then shows all 256 slots
 with what each holds, the cursor on the slot that already holds the image,
 otherwise the first empty one, and `RO` ticked. Move to the slot you want
 and press **Add** (or double-click, or Return); **Cancel** or Esc goes
@@ -233,7 +247,7 @@ failed, and 5 otherwise.
 | --- | --- |
 | `page hosts\|browse\|catalogue\|drives` | Show a page |
 | `host add URI`, `host edit URI`, `host remove`, `host up`, `host down`, `host select N` | Host list |
-| `browse`, `select NAME`, `enter`, `parent`, `assign [SLOT] ro\|rw` | Browse the selected host; `assign` without a slot is Add to Slot |
+| `browse`, `select NAME`, `enter`, `parent`, `assign [SLOT] ro\|rw` | Browse the selected host; `assign` without a slot is the Catalogue button |
 | `mount DRIVE ro\|rw` | Mount the selected image, as the Mount… button does |
 | `slot set N URI ro\|rw`, `slot clear N` | Catalogue |
 | `insert SLOT DRIVE ro\|rw`, `eject DRIVE` | Drives (`DRIVE` is a name like `DN0:`) |
@@ -285,3 +299,11 @@ palettes. To regenerate both, and then the icon:
 ```sh
 make regen-amiga-icons
 ```
+
+## Wi-Fi signal in the status line
+
+When the FujiNet reports a Wi-Fi status, the main window's status line shows four signal bars left of the mounted-drive count (all dim when not connected). The status is read once at startup (not in scripted runs) and refreshed whenever the Configure window reads or joins a network; it is not polled. The cell is omitted when the FujiNet has no Wi-Fi status.
+
+In Browse, files that are not disk images (.adf, .hdf, .hdd) are drawn in a quieter pen because they cannot be mounted. Folders and images look normal, and a selected row keeps its highlight. The dimming is a hint only: it does not block Mount.
+
+The mount picker (Mount... from Browse or the Catalogue) shows the same drive tiles. A fixed-media drive names its media type on the tile; a drive that cannot take the image is drawn in a quieter pen. While a mount or eject runs, the tile shows "Mounting..." or "Ejecting..." under its floppy.
